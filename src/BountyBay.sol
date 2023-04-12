@@ -1,5 +1,8 @@
 pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+
 contract BountyBay {
     address constant ZERO_ADDRESS = address(0);
 
@@ -26,7 +29,7 @@ contract BountyBay {
         uint256 validatorReward;
         uint256 minHunterReputation;
         uint256 minHunterDeposit;
-        uint256[] hunterCandidates;
+        address[] hunterCandidates;
     }
 
     struct User {
@@ -51,7 +54,7 @@ contract BountyBay {
 
     IERC20 public token;
 
-    constructor(IERC20 _token) {
+    constructor(IERC20 _token){
         token = _token;
     }
 
@@ -63,8 +66,7 @@ contract BountyBay {
         uint256 _hunterReward,
         uint256 _validatorReward,
         uint256 _minHunterReputation,
-        uint256 _minHunterDeposit,
-        uint256[] calldata _hunterCandidates
+        uint256 _minHunterDeposit
     ) external {
         require(_deadline > block.timestamp, "Invalid deadline");
         require(_hunterReward > 0, "Hunter reward must be > 0");
@@ -84,7 +86,7 @@ contract BountyBay {
             _validatorReward,
             _minHunterReputation,
             _minHunterDeposit,
-            _hunterCandidates
+            new address[](0)
         );
         bountyIds.push(bountyId);
         bountyId++;
@@ -92,8 +94,20 @@ contract BountyBay {
 
     function applyForBounty(uint256 _bountyId) external {
         User memory user = userByAddress[msg.sender];
-        Bounty memory bounty = bountyById[_bountyId];
+        Bounty storage bounty = bountyById[_bountyId];
+        require(bounty.creator != msg.sender, "Cannot apply for your own bounty");
         require(bounty.status == BountyStatus.OPEN, "Bounty not open");
         require(user.reputation >= bounty.minHunterReputation, "Reputation too low");
+
+        for(uint256 i; i < bounty.hunterCandidates.length; i++){
+            require(bounty.hunterCandidates[i] != msg.sender, "Already applied");
+        }
+
+        uint256 totalAmount = bounty.validatorReward + bounty.minHunterDeposit;
+
+        require(token.balanceOf(msg.sender) >= totalAmount, "Insufficient funds");
+
+        token.approve(address(this), totalAmount);
+        bounty.hunterCandidates.push(msg.sender);
     }
 }
