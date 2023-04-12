@@ -4,6 +4,7 @@ contract BountyBay {
     enum BountStatus {
         TO_DO,
         IN_PROGRESS,
+        REVIEW,
         DONE,
         CANCELLED
     }
@@ -20,6 +21,15 @@ contract BountyBay {
         uint256 minHunterReputation;
         uint256 minHunterDeposit;
         uint256 minHunterForValdiatorDeposit;
+    }
+
+    struct User {
+        address userAddress;
+        bool isValidator;
+        uint256 reputation;
+        uint256[] bountiesCompleted;
+        uint256[] bountiesCreated;
+        uint256[] bountiesFailed;
     }
 
     mapping(uint256 => Bounty) private bountyById;
