@@ -31,6 +31,7 @@ contract BountyBay {
         uint256 minHunterReputation;
         uint256 minHunterDeposit;
         address[] hunterCandidates;
+        uint256 nominationAcceptanceDeadline;
     }
 
     struct User {
@@ -45,6 +46,14 @@ contract BountyBay {
         uint256[] bountiesAssignedToValidation;
     }
 
+    struct Application {
+        address user;
+        uint256 bountyId;
+        uint256 validUntil;
+    }
+
+    mapping(address => mapping(uint256 => Application)) private applicationByBountyIdAndAddress;
+
     uint256 private bountyId;
     mapping(uint256 => Bounty) private bountyById;
     mapping(uint256 => address) private creatorByBountyId;
@@ -54,6 +63,7 @@ contract BountyBay {
     mapping(address => uint256) private balanceByAddress;
     uint256[] private bountyIds;
     uint256 public minBountyRealizationTime = 3 days;
+    uint256 public minNominationAcceptanceTime = 1 days;
 
     IERC20 public token;
 
@@ -90,7 +100,8 @@ contract BountyBay {
             _validatorReward,
             _minHunterReputation,
             _minHunterDeposit,
-            new address[](0)
+            new address[](0),
+            0
         );
 
         uint256 totalAmount = bounty.validatorReward + bounty.hunterReward;
@@ -102,17 +113,27 @@ contract BountyBay {
         bountyId++;
     }
 
-    function applyForBounty(uint256 _bountyId) external {
+    function applyForBounty(uint256 _bountyId, uint256 _estimatedRealizationTime) external {
         User memory user = userByAddress[msg.sender];
         Bounty storage bounty = bountyById[_bountyId];
         require(bounty.status == BountyStatus.OPEN, "Bounty not open");
         require(user.reputation >= bounty.minHunterReputation, "Reputation too low");
+
+        uint256 applicationValidUntil = bounty.deadline - minNominationAcceptanceTime - _estimatedRealizationTime;
+
+        require(applicationValidUntil >= block.timestamp, "Too late");
 
         for(uint256 i; i < bounty.hunterCandidates.length; i++){
             require(bounty.hunterCandidates[i] != msg.sender, "Already applied");
         }
 
         uint256 totalAmount = bounty.validatorReward + bounty.minHunterDeposit;
+
+        applicationByBountyIdAndAddress[msg.sender][_bountyId] = Application(
+            msg.sender,
+            _bountyId,
+            applicationValidUntil
+        );
 
         bounty.hunterCandidates.push(msg.sender);
     }
@@ -131,12 +152,18 @@ contract BountyBay {
 
         require(isCandidate, "Not a bounty candidate");
 
+        Application memory application = applicationByBountyIdAndAddress[_nominatedAddress][_bountyId];
+
+        require(application.validUntil >= block.timestamp, "Too late");
+
+        bounty.nominationAcceptanceDeadline = block.timestamp + minNominationAcceptanceTime;
         bounty.nominatedHunter = _nominatedAddress;
     }
 
     function acceptNomination(uint256 _bountyId) external {
         Bounty storage bounty = bountyById[_bountyId];
         require(bounty.nominatedHunter == msg.sender, "Must be nominated");
+        require(bounty.nominationAcceptanceDeadline >= block.timestamp, "Acceptance deadline passed");
         uint256 totalAmount = bounty.validatorReward + bounty.minHunterDeposit;
         bool success = token.transfer(address(this), totalAmount);
         require(success, "Error transfering funds");
@@ -151,5 +178,6 @@ contract BountyBay {
         require(bounty.creator == msg.sender, "Not bounty creator");
         require(bounty.nominatedHunter != ZERO_ADDRESS, "Missing nominated hunter");
         bounty.nominatedHunter = ZERO_ADDRESS;
+        bounty.nominationAcceptanceDeadline = 0;
     }
 }
