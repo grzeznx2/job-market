@@ -32,6 +32,7 @@ contract BountyBay {
         uint256 minHunterDeposit;
         address[] hunterCandidates;
         uint256 nominationAcceptanceDeadline;
+        string realisationProof;
     }
 
     struct User {
@@ -101,7 +102,8 @@ contract BountyBay {
             _minHunterReputation,
             _minHunterDeposit,
             new address[](0),
-            0
+            0,
+            ''
         );
 
         uint256 totalAmount = bounty.validatorReward + bounty.hunterReward;
@@ -142,6 +144,7 @@ contract BountyBay {
         Bounty storage bounty = bountyById[_bountyId];
         require(bounty.status == BountyStatus.OPEN, "Bounty not open");
         require(bounty.creator == msg.sender, "Not bounty creator");
+        require(msg.sender != _nominatedAddress, "Cannot nominate yourself");
         bool isCandidate;
         for(uint256 i; i < bounty.hunterCandidates.length; i++){
             if(bounty.hunterCandidates[i] == _nominatedAddress){
@@ -179,5 +182,14 @@ contract BountyBay {
         require(bounty.nominatedHunter != ZERO_ADDRESS, "Missing nominated hunter");
         bounty.nominatedHunter = ZERO_ADDRESS;
         bounty.nominationAcceptanceDeadline = 0;
+    }
+
+    function addBountyToReview(uint256 _bountyId, string calldata _realisationProof) external {
+        Bounty storage bounty = bountyById[_bountyId];
+        require(bounty.status == BountyStatus.IN_PROGRESS, "Bounty not in progress");
+        require(bounty.nominatedHunter == msg.sender, "Not bounty hunter");
+        require(bounty.deadline >= block.timestamp, "Deadline passed");
+        bounty.realisationProof = _realisationProof;
+        bounty.status = BountyStatus.REVIEW;
     }
 }
