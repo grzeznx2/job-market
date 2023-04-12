@@ -20,6 +20,7 @@ contract BountyBay {
         BountyStatus status;
         address creator;
         address hunter;
+        address nominatedHunter;
         address validator;
         string name;
         string description;
@@ -51,6 +52,7 @@ contract BountyBay {
     mapping(uint256 => address) private validatorByBountyId;
     mapping(address => User) private userByAddress;
     uint256[] private bountyIds;
+    uint256 public minBountyRealizationTime = 3 days;
 
     IERC20 public token;
 
@@ -68,7 +70,7 @@ contract BountyBay {
         uint256 _minHunterReputation,
         uint256 _minHunterDeposit
     ) external {
-        require(_deadline > block.timestamp, "Invalid deadline");
+        require(_deadline > block.timestamp + minBountyRealizationTime, "Deadline must be > 3 days");
         require(_hunterReward > 0, "Hunter reward must be > 0");
         require(_validatorReward > 0, "Validator reward must be > 0");
 
@@ -76,6 +78,7 @@ contract BountyBay {
             bountyId,
             BountyStatus.OPEN,
             msg.sender,
+            ZERO_ADDRESS,
             ZERO_ADDRESS,
             ZERO_ADDRESS,
             _name,
@@ -95,7 +98,6 @@ contract BountyBay {
     function applyForBounty(uint256 _bountyId) external {
         User memory user = userByAddress[msg.sender];
         Bounty storage bounty = bountyById[_bountyId];
-        require(bounty.creator != msg.sender, "Cannot apply for your own bounty");
         require(bounty.status == BountyStatus.OPEN, "Bounty not open");
         require(user.reputation >= bounty.minHunterReputation, "Reputation too low");
 
@@ -105,9 +107,23 @@ contract BountyBay {
 
         uint256 totalAmount = bounty.validatorReward + bounty.minHunterDeposit;
 
-        require(token.balanceOf(msg.sender) >= totalAmount, "Insufficient funds");
-
-        token.approve(address(this), totalAmount);
         bounty.hunterCandidates.push(msg.sender);
+    }
+
+    function nominateCandidate(uint256 _bountyId, address _nominatedAddress) external {
+        Bounty storage bounty = bountyById[_bountyId];
+        require(bounty.status == BountyStatus.OPEN, "Bounty not open");
+        require(bounty.creator == msg.sender, "Not bounty creator");
+        bool isCandidate;
+        for(uint256 i; i < bounty.hunterCandidates.length; i++){
+            if(bounty.hunterCandidates[i] == _nominatedAddress){
+                isCandidate = true;
+                break;
+            }
+        }
+
+        require(isCandidate, "Not a bounty candidate");
+
+        bounty.nominatedHunter = _nominatedAddress;
     }
 }
