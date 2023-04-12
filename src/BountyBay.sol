@@ -1,7 +1,7 @@
 pragma solidity ^0.8.0;
 
 contract BountyBay {
-    enum BountyStatus {
+    enum BountStatus {
         TO_DO,
         IN_PROGRESS,
         DONE,
@@ -21,4 +21,8 @@ contract BountyBay {
         uint256 minHunterDeposit;
         uint256 minHunterForValdiatorDeposit;
     }
+
+    mapping(uint256 => Bounty) private bountyById;
+    mapping(uint256 => address) private creatorByBountyId;
+    uint256[] private bountyIds;
 }
