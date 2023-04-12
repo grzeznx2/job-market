@@ -144,4 +144,12 @@ contract BountyBay {
         bounty.hunter = msg.sender;
         bounty.status = BountyStatus.IN_PROGRESS;
     }
+
+    function cancelCandidateNomination(uint256 _bountyId) external {
+        Bounty storage bounty = bountyById[_bountyId];
+        require(bounty.status == BountyStatus.OPEN, "Bounty not open");
+        require(bounty.creator == msg.sender, "Not bounty creator");
+        require(bounty.nominatedHunter != ZERO_ADDRESS, "Missing nominated hunter");
+        bounty.nominatedHunter = ZERO_ADDRESS;
+    }
 }
