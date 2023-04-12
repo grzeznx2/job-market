@@ -51,6 +51,7 @@ contract BountyBay {
     mapping(uint256 => address) private hunterByBountyId;
     mapping(uint256 => address) private validatorByBountyId;
     mapping(address => User) private userByAddress;
+    mapping(address => uint256) private balanceByAddress;
     uint256[] private bountyIds;
     uint256 public minBountyRealizationTime = 3 days;
 
@@ -74,7 +75,7 @@ contract BountyBay {
         require(_hunterReward > 0, "Hunter reward must be > 0");
         require(_validatorReward > 0, "Validator reward must be > 0");
 
-        bountyById[bountyId] = Bounty(
+        Bounty memory bounty = Bounty(
             bountyId,
             BountyStatus.OPEN,
             msg.sender,
@@ -91,6 +92,12 @@ contract BountyBay {
             _minHunterDeposit,
             new address[](0)
         );
+
+        uint256 totalAmount = bounty.validatorReward + bounty.hunterReward;
+        bool success = token.transfer(address(this), totalAmount);
+        require(success, "Error transfering funds");
+        balanceByAddress[msg.sender] += totalAmount;
+        bountyById[bountyId] = bounty;
         bountyIds.push(bountyId);
         bountyId++;
     }
@@ -125,5 +132,16 @@ contract BountyBay {
         require(isCandidate, "Not a bounty candidate");
 
         bounty.nominatedHunter = _nominatedAddress;
+    }
+
+    function acceptNomination(uint256 _bountyId) external {
+        Bounty storage bounty = bountyById[_bountyId];
+        require(bounty.nominatedHunter == msg.sender, "Must be nominated");
+        uint256 totalAmount = bounty.validatorReward + bounty.minHunterDeposit;
+        bool success = token.transfer(address(this), totalAmount);
+        require(success, "Error transfering funds");
+        balanceByAddress[msg.sender] += totalAmount;
+        bounty.hunter = msg.sender;
+        bounty.status = BountyStatus.IN_PROGRESS;
     }
 }
