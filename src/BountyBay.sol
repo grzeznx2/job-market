@@ -4,7 +4,8 @@ contract BountyBay {
     address constant ZERO_ADDRESS = address(0);
 
     enum BountyStatus {
-        TO_DO,
+        INVALID,
+        OPEN,
         IN_PROGRESS,
         REVIEW,
         DONE,
@@ -13,6 +14,7 @@ contract BountyBay {
 
     struct Bounty {
         uint256 id;
+        BountyStatus status;
         address creator;
         address hunter;
         address validator;
@@ -24,6 +26,7 @@ contract BountyBay {
         uint256 validatorReward;
         uint256 minHunterReputation;
         uint256 minHunterDeposit;
+        uint256[] hunterCandidates;
     }
 
     struct User {
@@ -43,7 +46,14 @@ contract BountyBay {
     mapping(uint256 => address) private creatorByBountyId;
     mapping(uint256 => address) private hunterByBountyId;
     mapping(uint256 => address) private validatorByBountyId;
+    mapping(address => User) private userByAddress;
     uint256[] private bountyIds;
+
+    IERC20 public token;
+
+    constructor(IERC20 _token) {
+        token = _token;
+    }
 
     function createBounty(
         string memory _name,
@@ -53,7 +63,8 @@ contract BountyBay {
         uint256 _hunterReward,
         uint256 _validatorReward,
         uint256 _minHunterReputation,
-        uint256 _minHunterDeposit
+        uint256 _minHunterDeposit,
+        uint256[] calldata _hunterCandidates
     ) external {
         require(_deadline > block.timestamp, "Invalid deadline");
         require(_hunterReward > 0, "Hunter reward must be > 0");
@@ -61,6 +72,7 @@ contract BountyBay {
 
         bountyById[bountyId] = Bounty(
             bountyId,
+            BountyStatus.OPEN,
             msg.sender,
             ZERO_ADDRESS,
             ZERO_ADDRESS,
@@ -71,9 +83,17 @@ contract BountyBay {
             _hunterReward,
             _validatorReward,
             _minHunterReputation,
-            _minHunterDeposit
+            _minHunterDeposit,
+            _hunterCandidates
         );
         bountyIds.push(bountyId);
         bountyId++;
+    }
+
+    function applyForBounty(uint256 _bountyId) external {
+        User memory user = userByAddress[msg.sender];
+        Bounty memory bounty = bountyById[_bountyId];
+        require(bounty.status == BountyStatus.OPEN, "Bounty not open");
+        require(user.reputation >= bounty.minHunterReputation, "Reputation too low");
     }
 }
