@@ -5,9 +5,9 @@ import "forge-std/Test.sol";
 import "../src/BountyBay.sol";
 
 contract BountyBayTest is Test {
-    BountyBay public bountyBayContract;
+    // BountyBay public bountyBayContract;
 
-    function setUp() public {
-        bountyBayContract = new BountyBay();
-    }
+    // function setUp() public {
+    //     bountyBayContract = new BountyBay("0x3665DaC6388FdE573EaDaAe55Fc76588C3b9dD7c");
+    // }
 }

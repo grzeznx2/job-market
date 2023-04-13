@@ -32,6 +32,7 @@ contract BountyBay {
         uint256 minHunterDeposit;
         address[] hunterCandidates;
         uint256 nominationAcceptanceDeadline;
+        string realisationProof;
     }
 
     struct User {
@@ -53,7 +54,7 @@ contract BountyBay {
     }
 
     mapping(address => mapping(uint256 => Application)) private applicationByBountyIdAndAddress;
-
+    address public admin;
     uint256 private bountyId;
     mapping(uint256 => Bounty) private bountyById;
     mapping(uint256 => address) private creatorByBountyId;
@@ -64,11 +65,19 @@ contract BountyBay {
     uint256[] private bountyIds;
     uint256 public minBountyRealizationTime = 3 days;
     uint256 public minNominationAcceptanceTime = 1 days;
+    mapping(address => bool) public isWhitelistedToken;
+    mapping(address => mapping(address => uint256)) private tokenBalanceByUser;
 
     IERC20 public token;
 
-    constructor(IERC20 _token){
-        token = _token;
+      constructor(address _tokenAddress) {
+        token = IERC20(_tokenAddress);
+        admin = msg.sender;
+    }
+
+     modifier onlyAdmin() {
+        require(msg.sender == admin, "Only for admin");
+        _;
     }
 
     function createBounty(
@@ -101,7 +110,8 @@ contract BountyBay {
             _minHunterReputation,
             _minHunterDeposit,
             new address[](0),
-            0
+            0,
+            ''
         );
 
         uint256 totalAmount = bounty.validatorReward + bounty.hunterReward;
@@ -127,7 +137,7 @@ contract BountyBay {
             require(bounty.hunterCandidates[i] != msg.sender, "Already applied");
         }
 
-        uint256 totalAmount = bounty.validatorReward + bounty.minHunterDeposit;
+        // uint256 totalAmount = bounty.validatorReward + bounty.minHunterDeposit;
 
         applicationByBountyIdAndAddress[msg.sender][_bountyId] = Application(
             msg.sender,
@@ -142,6 +152,7 @@ contract BountyBay {
         Bounty storage bounty = bountyById[_bountyId];
         require(bounty.status == BountyStatus.OPEN, "Bounty not open");
         require(bounty.creator == msg.sender, "Not bounty creator");
+        require(msg.sender != _nominatedAddress, "Cannot nominate yourself");
         bool isCandidate;
         for(uint256 i; i < bounty.hunterCandidates.length; i++){
             if(bounty.hunterCandidates[i] == _nominatedAddress){
@@ -165,9 +176,9 @@ contract BountyBay {
         require(bounty.nominatedHunter == msg.sender, "Must be nominated");
         require(bounty.nominationAcceptanceDeadline >= block.timestamp, "Acceptance deadline passed");
         uint256 totalAmount = bounty.validatorReward + bounty.minHunterDeposit;
+        balanceByAddress[msg.sender] += totalAmount;
         bool success = token.transfer(address(this), totalAmount);
         require(success, "Error transfering funds");
-        balanceByAddress[msg.sender] += totalAmount;
         bounty.hunter = msg.sender;
         bounty.status = BountyStatus.IN_PROGRESS;
     }
@@ -179,5 +190,22 @@ contract BountyBay {
         require(bounty.nominatedHunter != ZERO_ADDRESS, "Missing nominated hunter");
         bounty.nominatedHunter = ZERO_ADDRESS;
         bounty.nominationAcceptanceDeadline = 0;
+    }
+
+    function addBountyToReview(uint256 _bountyId, string calldata _realisationProof) external {
+        Bounty storage bounty = bountyById[_bountyId];
+        require(bounty.status == BountyStatus.IN_PROGRESS, "Bounty not in progress");
+        require(bounty.nominatedHunter == msg.sender, "Not bounty hunter");
+        require(bounty.deadline >= block.timestamp, "Deadline passed");
+        bounty.realisationProof = _realisationProof;
+        bounty.status = BountyStatus.REVIEW;
+    }
+
+    function whitelistToken(address _token) external onlyAdmin {
+        isWhitelistedToken[_token] = true;
+    }
+
+    function blacklistToken(address _token) external onlyAdmin {
+        isWhitelistedToken[_token] = false;
     }
 }
