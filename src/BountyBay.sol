@@ -208,4 +208,11 @@ contract BountyBay {
     function blacklistToken(address _token) external onlyAdmin {
         isWhitelistedToken[_token] = false;
     }
+
+    function addFunds(uint256 _amount, address _token) external {
+        require(isWhitelistedToken[_token], "Token not allowed");
+        tokenBalanceByUser[msg.sender][_token] += _amount;
+        bool success = IERC20(_token).transferFrom(msg.sender, address(this), _amount);
+        require(success, "Error transferring funds");
+    }
 }
