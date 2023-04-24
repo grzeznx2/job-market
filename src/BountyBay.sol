@@ -232,6 +232,13 @@ contract BountyBay {
         require(success, "Error transferring funds");
     }
 
+    function withdrawFunds(uint256 _amount, address _token) external {
+        require(claimableTokenBalanceByUser[msg.sender][_token] >= _amount, "Amount exceeds balance");
+        claimableTokenBalanceByUser[msg.sender][_token] -= _amount;
+        bool success = IERC20(_token).transfer(msg.sender, _amount);
+        require(success, "Error transferring funds");
+    }
+
     function acceptBountyCompletion(uint256 _bountyId) external {
         Bounty storage bounty = bountyById[_bountyId];
 
