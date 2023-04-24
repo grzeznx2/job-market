@@ -24,6 +24,7 @@ contract BountyBay {
         address hunter;
         address nominatedHunter;
         address validator;
+        address token;
         string name;
         string description;
         string acceptanceCriteria;
@@ -63,17 +64,14 @@ contract BountyBay {
     mapping(uint256 => address) private hunterByBountyId;
     mapping(uint256 => address) private validatorByBountyId;
     mapping(address => User) private userByAddress;
-    mapping(address => uint256) private balanceByAddress;
     uint256[] private bountyIds;
     uint256 public minBountyRealizationTime = 3 days;
     uint256 public minNominationAcceptanceTime = 1 days;
     mapping(address => bool) public isWhitelistedToken;
     mapping(address => mapping(address => uint256)) private tokenBalanceByUser;
+    mapping(address => mapping(address => uint256)) private claimableTokenBalanceByUser;
 
-    IERC20 public token;
-
-      constructor(address _tokenAddress) {
-        token = IERC20(_tokenAddress);
+      constructor() {
         admin = msg.sender;
     }
 
@@ -83,6 +81,7 @@ contract BountyBay {
     }
 
     function createBounty(
+        address _token,
         string memory _name,
         string memory _description,
         string memory _acceptanceCriteria,
@@ -95,6 +94,7 @@ contract BountyBay {
         require(_deadline > block.timestamp + minBountyRealizationTime, "Deadline must be > 3 days");
         require(_hunterReward > 0, "Hunter reward must be > 0");
         require(_validatorReward > 0, "Validator reward must be > 0");
+        require(isWhitelistedToken[_token], "Invalid token");
 
         Bounty memory bounty = Bounty(
             bountyId,
@@ -103,6 +103,7 @@ contract BountyBay {
             ZERO_ADDRESS,
             ZERO_ADDRESS,
             ZERO_ADDRESS,
+            _token,
             _name,
             _description,
             _acceptanceCriteria,
@@ -117,9 +118,17 @@ contract BountyBay {
         );
 
         uint256 totalAmount = bounty.validatorReward + bounty.hunterReward;
-        bool success = token.transfer(address(this), totalAmount);
-        require(success, "Error transfering funds");
-        balanceByAddress[msg.sender] += totalAmount;
+        /*
+        If user has funds in the contract, take it from here, otherwise create transfer
+         */
+        if(claimableTokenBalanceByUser[msg.sender][_token] >= totalAmount){
+            claimableTokenBalanceByUser[msg.sender][_token] -= totalAmount;
+        }else{
+            bool success = IERC20(_token).transferFrom(msg.sender, address(this), totalAmount);
+            require(success, "Error transfering funds");
+
+        }
+        tokenBalanceByUser[msg.sender][_token] += totalAmount;
         bountyById[bountyId] = bounty;
         bountyIds.push(bountyId);
         bountyId++;
@@ -177,10 +186,15 @@ contract BountyBay {
         Bounty storage bounty = bountyById[_bountyId];
         require(bounty.nominatedHunter == msg.sender, "Must be nominated");
         require(bounty.nominationAcceptanceDeadline >= block.timestamp, "Acceptance deadline passed");
+        address token = bounty.token;
         uint256 totalAmount = bounty.validatorReward + bounty.minHunterDeposit;
-        balanceByAddress[msg.sender] += totalAmount;
-        bool success = token.transfer(address(this), totalAmount);
-        require(success, "Error transfering funds");
+        if(claimableTokenBalanceByUser[msg.sender][token] >= totalAmount){
+            claimableTokenBalanceByUser[msg.sender][token] -= totalAmount;
+        }else{
+            bool success = IERC20(token).transferFrom(msg.sender, address(this), totalAmount);
+            require(success, "Error transfering funds");
+        }
+        tokenBalanceByUser[msg.sender][token] += totalAmount;
         bounty.hunter = msg.sender;
         bounty.status = BountyStatus.IN_PROGRESS;
     }
