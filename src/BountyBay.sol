@@ -260,4 +260,13 @@ contract BountyBay {
         bounty.status = BountyStatus.ACCEPTED;
 
     }
+
+    function rejectBountyCompletion(uint256 _bountyId) external {
+        Bounty storage bounty = bountyById[_bountyId];
+
+        require(bounty.creator == msg.sender, "Not bounty creator");
+        require(bounty.status == BountyStatus.REVIEW, "Bounty not under review");
+
+        bounty.status = BountyStatus.NOT_ACCEPTED;
+    }
 }
