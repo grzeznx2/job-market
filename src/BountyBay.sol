@@ -8,11 +8,13 @@ contract BountyBay {
 
     enum BountyStatus {
         INVALID,
-        OPEN,
-        IN_PROGRESS,
-        REVIEW,
-        DONE,
-        CANCELLED
+        OPEN, 
+        IN_PROGRESS, 
+        REVIEW, 
+        ACCEPTED,
+        NOT_ACCEPTED,
+        VALIDATING,
+        ENDED
     }
 
     struct Bounty {
