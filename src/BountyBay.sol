@@ -279,14 +279,25 @@ contract BountyBay {
         address creator = bounty.creator;
         address token = bounty.token;
         uint256 validatorReward = bounty.validatorReward;
-        uint256 creatorAmount = validatorReward + bounty.hunterReward + bounty.minHunterDeposit;
+        uint256 hunterReward = bounty.hunterReward;
+        uint256 minHunterDeposit = bounty.minHunterDeposit;
+        uint256 creatorAmount = validatorReward + hunterReward + minHunterDeposit;
 
         claimableTokenBalanceByUser[creator][token] += creatorAmount;
-        tokenBalanceByUser[creator][token] -= (validatorReward + bounty.hunterReward);
+        tokenBalanceByUser[creator][token] -= (validatorReward + hunterReward);
         claimableTokenBalanceByUser[msg.sender][token] += validatorReward;
-        tokenBalanceByUser[msg.sender][token] -= (validatorReward + bounty.minHunterDeposit);
+        tokenBalanceByUser[msg.sender][token] -= (validatorReward + minHunterDeposit);
 
         bounty.status = BountyStatus.ENDED;
+    }
+
+    function passBountyToValidation(uint256 _bountyId) external {
+        Bounty storage bounty = bountyById[_bountyId];
+
+        require(bounty.hunter == msg.sender, "Not bounty hunter");
+        require(bounty.status == BountyStatus.NOT_ACCEPTED, "Bounty not rejected");
+
+        bounty.status = BountyStatus.VALIDATING;
     }
 
 
