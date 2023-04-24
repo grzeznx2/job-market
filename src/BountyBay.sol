@@ -211,7 +211,7 @@ contract BountyBay {
     function addBountyToReview(uint256 _bountyId, string calldata _realisationProof) external {
         Bounty storage bounty = bountyById[_bountyId];
         require(bounty.status == BountyStatus.IN_PROGRESS, "Bounty not in progress");
-        require(bounty.nominatedHunter == msg.sender, "Not bounty hunter");
+        require(bounty.hunter == msg.sender, "Not bounty hunter");
         require(bounty.deadline >= block.timestamp, "Deadline passed");
         bounty.realisationProof = _realisationProof;
         bounty.status = BountyStatus.REVIEW;
@@ -227,7 +227,7 @@ contract BountyBay {
 
     function addFunds(uint256 _amount, address _token) external {
         require(isWhitelistedToken[_token], "Token not allowed");
-        tokenBalanceByUser[msg.sender][_token] += _amount;
+        claimableTokenBalanceByUser[msg.sender][_token] += _amount;
         bool success = IERC20(_token).transferFrom(msg.sender, address(this), _amount);
         require(success, "Error transferring funds");
     }
@@ -269,4 +269,25 @@ contract BountyBay {
 
         bounty.status = BountyStatus.NOT_ACCEPTED;
     }
+
+    function acceptBountyRejection(uint256 _bountyId) external {
+        Bounty storage bounty = bountyById[_bountyId];
+
+        require(bounty.hunter == msg.sender, "Not bounty hunter");
+        require(bounty.status == BountyStatus.NOT_ACCEPTED, "Bounty not rejected");
+
+        address creator = bounty.creator;
+        address token = bounty.token;
+        uint256 validatorReward = bounty.validatorReward;
+        uint256 creatorAmount = validatorReward + bounty.hunterReward + bounty.minHunterDeposit;
+
+        claimableTokenBalanceByUser[creator][token] += creatorAmount;
+        tokenBalanceByUser[creator][token] -= (validatorReward + bounty.hunterReward);
+        claimableTokenBalanceByUser[msg.sender][token] += validatorReward;
+        tokenBalanceByUser[msg.sender][token] -= (validatorReward + bounty.minHunterDeposit);
+
+        bounty.status = BountyStatus.ENDED;
+    }
+
+
 }
