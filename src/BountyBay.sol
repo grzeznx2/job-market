@@ -231,4 +231,26 @@ contract BountyBay {
         bool success = IERC20(_token).transferFrom(msg.sender, address(this), _amount);
         require(success, "Error transferring funds");
     }
+
+    function acceptBountyCompletion(uint256 _bountyId) external {
+        Bounty storage bounty = bountyById[_bountyId];
+
+        require(bounty.creator == msg.sender, "Not bounty creator");
+        require(bounty.status == BountyStatus.REVIEW, "Bounty not under review");
+
+        address hunter = bounty.hunter;
+        address token = bounty.token;
+        uint256 validatorReward = bounty.validatorReward;
+        uint256 hunterReward = bounty.hunterReward;
+        uint256 hunterDeposits = bounty.minHunterDeposit + validatorReward;
+        uint256 hunterAmount = hunterReward + hunterDeposits;
+
+        claimableTokenBalanceByUser[hunter][token] += hunterAmount;
+        tokenBalanceByUser[hunter][token] -= hunterDeposits;
+        claimableTokenBalanceByUser[msg.sender][token] += validatorReward;
+        tokenBalanceByUser[msg.sender][token] -= (validatorReward + hunterAmount);
+
+        bounty.status = BountyStatus.ACCEPTED;
+
+    }
 }
