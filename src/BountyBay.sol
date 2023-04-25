@@ -200,6 +200,11 @@ contract BountyBay {
         bounty.status = BountyStatus.IN_PROGRESS;
     }
 
+    function cancelApplication(uint256 _bountyId) external {
+        require(applicationByBountyIdAndAddress[msg.sender][_bountyId].hunter != address(0), "Application does not exist");
+        delete applicationByBountyIdAndAddress[msg.sender][_bountyId];
+    }
+
     function cancelCandidateNomination(uint256 _bountyId) external {
         Bounty storage bounty = bountyById[_bountyId];
         require(bounty.status == BountyStatus.OPEN, "Bounty not open");
