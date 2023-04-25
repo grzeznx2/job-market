@@ -226,6 +226,16 @@ contract BountyBay {
         bounty.status = BountyStatus.REVIEW;
     }
 
+    function getBountyApplications(uint256 _bountyId) external view returns (Application[] memory){
+        address[] memory hunterCandidates = bountyById[_bountyId].hunterCandidates;
+        uint256 applicationsCount = hunterCandidates.length;
+        Application[] memory applications = new Application[](applicationsCount);
+        for(uint256 i; i < applicationsCount; i++){
+            applications[i] = applicationByBountyIdAndAddress[hunterCandidates[i]][_bountyId];
+        }
+        return applications;
+    }
+
     function whitelistToken(address _token) external onlyAdmin {
         isWhitelistedToken[_token] = true;
     }
