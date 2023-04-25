@@ -70,6 +70,7 @@ contract BountyBay {
     mapping(uint256 => address) private validatorByBountyId;
     mapping(address => User) private userByAddress;
     uint256[] private bountyIds;
+    mapping(address => uint256[]) private bountyIdsByCreator;
     // uint256 public minBountyRealizationTime = 3 days;
     // uint256 public minNominationAcceptanceTime = 1 days;
     // uint256 public minReviewPeriodTime = 1 days;
@@ -142,6 +143,7 @@ contract BountyBay {
         }
         tokenBalanceByUser[msg.sender][_token] += totalAmount;
         bountyById[bountyId] = bounty;
+        bountyIdsByCreator[msg.sender].push(bountyId);
         bountyIds.push(bountyId);
         bountyId++;
     }
@@ -234,6 +236,16 @@ contract BountyBay {
             applications[i] = applicationByBountyIdAndAddress[hunterCandidates[i]][_bountyId];
         }
         return applications;
+    }
+
+    function getBountiesByCreator(address _creator) external view returns (Bounty[] memory){
+        uint256[] memory creatorBountyIds = bountyIdsByCreator[_creator];
+        uint256 bountyIdsCount = creatorBountyIds.length;
+        Bounty[] memory bounties = new Bounty[](bountyIdsCount);
+        for(uint256 i; i < bountyIdsCount; i++){
+            bounties[i] = bountyById[creatorBountyIds[i]];
+        }
+        return bounties;
     }
 
     function whitelistToken(address _token) external onlyAdmin {
