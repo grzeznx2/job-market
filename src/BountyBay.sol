@@ -29,6 +29,8 @@ contract BountyBay {
         string description;
         string acceptanceCriteria;
         uint256 deadline;
+        uint256 nominationAcceptanceTime;
+        uint256 reviewPeriodTime;
         uint256 hunterReward;
         uint256 validatorReward;
         uint256 minHunterReputation;
@@ -67,6 +69,7 @@ contract BountyBay {
     uint256[] private bountyIds;
     uint256 public minBountyRealizationTime = 3 days;
     uint256 public minNominationAcceptanceTime = 1 days;
+    uint256 public minReviewPeriodTime = 1 days;
     mapping(address => bool) public isWhitelistedToken;
     mapping(address => mapping(address => uint256)) private tokenBalanceByUser;
     mapping(address => mapping(address => uint256)) private claimableTokenBalanceByUser;
@@ -86,13 +89,17 @@ contract BountyBay {
         string memory _description,
         string memory _acceptanceCriteria,
         uint256 _deadline,
+        uint256 _nominationAcceptanceTime,
+        uint256 _reviewPeriodTime,
         uint256 _hunterReward,
         uint256 _validatorReward,
         uint256 _minHunterReputation,
         uint256 _minHunterDeposit
     ) external {
         require(_deadline > block.timestamp + minBountyRealizationTime, "Deadline must be > 3 days");
-        require(_hunterReward > 0, "Hunter reward must be > 0");
+        require(_nominationAcceptanceTime >= minNominationAcceptanceTime, "Nomination acceptance time must be >= minNominationAcceptanceTime");
+        require(_reviewPeriodTime > minReviewPeriodTime, "Review Period Time must be >= minReviewPeriodTime");
+        require(_hunterReward >= 0, "Hunter reward must be > 0");
         require(_validatorReward > 0, "Validator reward must be > 0");
         require(isWhitelistedToken[_token], "Invalid token");
 
@@ -108,6 +115,8 @@ contract BountyBay {
             _description,
             _acceptanceCriteria,
             _deadline,
+            _nominationAcceptanceTime,
+            _reviewPeriodTime,
             _hunterReward,
             _validatorReward,
             _minHunterReputation,
@@ -147,8 +156,6 @@ contract BountyBay {
         for(uint256 i; i < bounty.hunterCandidates.length; i++){
             require(bounty.hunterCandidates[i] != msg.sender, "Already applied");
         }
-
-        // uint256 totalAmount = bounty.validatorReward + bounty.minHunterDeposit;
 
         applicationByBountyIdAndAddress[msg.sender][_bountyId] = Application(
             msg.sender,
