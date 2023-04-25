@@ -187,6 +187,7 @@ contract BountyBay {
         require(bounty.status == BountyStatus.HUNTER_NOMINATED, "Incorrect bounty status");
         require(bounty.nominatedHunter == msg.sender, "Must be nominated");
         require(bounty.nominationAcceptanceDeadline >= block.timestamp, "Acceptance deadline passed");
+        Application memory application = applicationByBountyIdAndAddress[msg.sender][_bountyId]; 
         address token = bounty.token;
         uint256 totalAmount = bounty.validatorReward + bounty.minHunterDeposit;
         if(claimableTokenBalanceByUser[msg.sender][token] >= totalAmount){
@@ -196,6 +197,8 @@ contract BountyBay {
             require(success, "Error transfering funds");
         }
         tokenBalanceByUser[msg.sender][token] += totalAmount;
+        bounty.hunterReward = application.proposedReward;
+        bounty.deadline = application.proposedDeadline;
         bounty.hunter = msg.sender;
         bounty.status = BountyStatus.IN_PROGRESS;
     }
