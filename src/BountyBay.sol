@@ -24,7 +24,9 @@ contract BountyBay {
         ACCEPTED,
         CANCELED,
         CANCELED_AFTER_NOMINATION_BY_HUNTER,
-        CANCELED_AFTER_NOMINATION_BY_CREATOR
+        CANCELED_AFTER_NOMINATION_BY_CREATOR,
+        CANCELED_AFTER_ACCEPTANCE_BY_HUNTER,
+        CANCELED_AFTER_ACCEPTANCE_BY_CREATOR
     }
 
     struct Bounty {
@@ -60,6 +62,8 @@ contract BountyBay {
         uint256[] bountiesValidated;
         uint256[] bountiesAssignedToDo;
         uint256[] bountiesAssignedToValidation;
+        uint256 canceledAfterNomination;
+        uint256 canceledAfterAcceptance;
     }
 
     struct Application {
@@ -279,6 +283,7 @@ contract BountyBay {
             bounty.nominatedHunter = ZERO_ADDRESS;
             bounty.nominationAcceptanceDeadline = 0;
             bounty.status = BountyStatus.OPEN;
+            userByAddress[msg.sender].canceledAfterNomination += 1;
         } else {
             revert("Invalid application status");
         }
