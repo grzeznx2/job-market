@@ -518,4 +518,19 @@ contract BountyBay {
             application.validUntil = _validUntil;
         }
     }
+
+    // TODO: move this method to some library
+    function getDaysFromNow(
+        uint256 _timestamp
+    ) external view returns (uint256) {
+        uint256 difference = _absoluteDifference(_timestamp, block.timestamp);
+        return difference / 1 days;
+    }
+
+    function _absoluteDifference(
+        uint256 a,
+        uint256 b
+    ) private pure returns (uint256) {
+        return a >= b ? a - b : b - a;
+    }
 }
