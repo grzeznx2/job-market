@@ -72,6 +72,7 @@ contract BountyBay {
         uint256 proposedDeadline;
         uint256 proposedReward;
         uint256 validUntil;
+        uint256 acceptedAt;
         ApplicationStatus status;
     }
 
@@ -203,6 +204,7 @@ contract BountyBay {
             _proposedDeadline,
             _proposedReward,
             _validUntil,
+            0,
             ApplicationStatus.PENDING
         );
 
@@ -284,6 +286,31 @@ contract BountyBay {
             bounty.nominationAcceptanceDeadline = 0;
             bounty.status = BountyStatus.OPEN;
             userByAddress[msg.sender].canceledAfterNomination += 1;
+        } else if (status == ApplicationStatus.ACCEPTED) {
+            application.status ==
+                ApplicationStatus.CANCELED_AFTER_ACCEPTANCE_BY_HUNTER;
+            Bounty storage bounty = bountyById[_bountyId];
+            bounty.hunter = ZERO_ADDRESS;
+            bounty.nominatedHunter = ZERO_ADDRESS;
+            bounty.nominationAcceptanceDeadline = 0;
+            bounty.status = BountyStatus.OPEN;
+            userByAddress[msg.sender].canceledAfterAcceptance += 1;
+
+            address creator = bounty.creator;
+            address token = bounty.token;
+            uint256 validatorReward = bounty.validatorReward;
+            uint256 hunterReward = bounty.hunterReward;
+            uint256 minHunterDeposit = bounty.minHunterDeposit;
+            uint256 creatorAmount = validatorReward +
+                hunterReward +
+                minHunterDeposit;
+
+            claimableTokenBalanceByUser[creator][token] += creatorAmount;
+            tokenBalanceByUser[creator][token] -= (validatorReward +
+                hunterReward);
+            claimableTokenBalanceByUser[msg.sender][token] += validatorReward;
+            tokenBalanceByUser[msg.sender][token] -= (validatorReward +
+                minHunterDeposit);
         } else {
             revert("Invalid application status");
         }
