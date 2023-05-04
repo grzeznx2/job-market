@@ -50,6 +50,8 @@ contract BountyBay {
         address[] hunterCandidates;
         uint256 nominationAcceptanceDeadline;
         string realisationProof;
+        uint8 hunterDepositDecreasePerDayAfterAcceptance;
+        uint8 hunterRewardDecreasePerDayAfterDeadline;
     }
 
     struct User {
@@ -115,7 +117,9 @@ contract BountyBay {
         uint256 _hunterReward,
         uint256 _validatorReward,
         uint256 _minHunterReputation,
-        uint256 _minHunterDeposit
+        uint256 _minHunterDeposit,
+        uint8 _refundDecreasePerDayAfterAcceptance,
+        uint8 _rewardDecreasePerDayAfterDeadline
     ) external {
         require(_deadline > block.timestamp, "Deadline must be in the future");
         require(
@@ -126,6 +130,14 @@ contract BountyBay {
         require(_hunterReward >= 0, "Hunter reward must be > 0");
         require(_validatorReward > 0, "Validator reward must be > 0");
         require(isWhitelistedToken[_token], "Invalid token");
+        require(
+            _refundDecreasePerDayAfterAcceptance <= 100,
+            "Refund decrease must be <= 100"
+        );
+        require(
+            _rewardDecreasePerDayAfterDeadline <= 100,
+            "Reward decrease must be <= 100"
+        );
 
         Bounty memory bounty = Bounty(
             bountyId,
@@ -147,7 +159,9 @@ contract BountyBay {
             _minHunterDeposit,
             new address[](0),
             0,
-            ""
+            "",
+            _refundDecreasePerDayAfterAcceptance,
+            _rewardDecreasePerDayAfterDeadline
         );
 
         uint256 totalAmount = bounty.validatorReward + bounty.hunterReward;
@@ -264,6 +278,7 @@ contract BountyBay {
         }
         tokenBalanceByUser[msg.sender][token] += totalAmount;
         application.status = ApplicationStatus.ACCEPTED;
+        application.acceptedAt = block.timestamp;
         bounty.hunterReward = application.proposedReward;
         bounty.deadline = application.proposedDeadline;
         bounty.hunter = msg.sender;
@@ -296,21 +311,36 @@ contract BountyBay {
             bounty.status = BountyStatus.OPEN;
             userByAddress[msg.sender].canceledAfterAcceptance += 1;
 
+            uint256 daysSinceAcceptance = getDaysFromNow(
+                application.acceptedAt
+            );
+            // +1: 0 days counts as 1
+            uint256 percentageLostByHunter = (daysSinceAcceptance + 1) *
+                bounty.hunterDepositDecreasePerDayAfterAcceptance;
+            if (percentageLostByHunter > 100) {
+                percentageLostByHunter = 100;
+            }
+
+            uint256 minHunterDeposit = bounty.minHunterDeposit;
+            uint256 depositLostByHunter = (percentageLostByHunter *
+                minHunterDeposit *
+                100) / 10_000;
+            uint256 depositReturnedToHunter = minHunterDeposit -
+                depositLostByHunter;
+
             address creator = bounty.creator;
             address token = bounty.token;
             uint256 validatorReward = bounty.validatorReward;
             uint256 hunterReward = bounty.hunterReward;
-            uint256 minHunterDeposit = bounty.minHunterDeposit;
             uint256 creatorAmount = validatorReward +
                 hunterReward +
-                minHunterDeposit;
+                depositLostByHunter;
 
             claimableTokenBalanceByUser[creator][token] += creatorAmount;
-            tokenBalanceByUser[creator][token] -= (validatorReward +
-                hunterReward);
-            claimableTokenBalanceByUser[msg.sender][token] += validatorReward;
+            claimableTokenBalanceByUser[msg.sender][token] += (validatorReward +
+                depositReturnedToHunter);
             tokenBalanceByUser[msg.sender][token] -= (validatorReward +
-                minHunterDeposit);
+                depositLostByHunter);
         } else {
             revert("Invalid application status");
         }
@@ -522,7 +552,7 @@ contract BountyBay {
     // TODO: move this method to some library
     function getDaysFromNow(
         uint256 _timestamp
-    ) external view returns (uint256) {
+    ) internal view returns (uint256) {
         uint256 difference = _absoluteDifference(_timestamp, block.timestamp);
         return difference / 1 days;
     }
