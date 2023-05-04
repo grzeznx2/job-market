@@ -264,38 +264,23 @@ contract BountyBay {
         bounty.status = BountyStatus.IN_PROGRESS;
     }
 
-    function rejectNomination(uint256 _bountyId) external {
-        Bounty storage bounty = bountyById[_bountyId];
-        require(
-            bounty.status == BountyStatus.HUNTER_NOMINATED,
-            "Incorrect bounty status"
-        );
-        require(bounty.nominatedHunter == msg.sender, "Must be nominated");
-        require(
-            bounty.nominationAcceptanceDeadline >= block.timestamp,
-            "Acceptance deadline passed"
-        );
-    }
-
     function cancelApplication(uint256 _bountyId) external {
         Application storage application = applicationByBountyIdAndAddress[
             msg.sender
         ][_bountyId];
         ApplicationStatus status = application.status;
-        require(
-            status == ApplicationStatus.NOMINATED ||
-                status == ApplicationStatus.PENDING,
-            "Invalid aplication status"
-        );
+
         if (status == ApplicationStatus.PENDING) {
             application.status = ApplicationStatus.CANCELED;
-        } else {
+        } else if (status == ApplicationStatus.NOMINATED) {
             application.status = ApplicationStatus
                 .CANCELED_AFTER_NOMINATION_BY_HUNTER;
             Bounty storage bounty = bountyById[_bountyId];
             bounty.nominatedHunter = ZERO_ADDRESS;
             bounty.nominationAcceptanceDeadline = 0;
             bounty.status = BountyStatus.OPEN;
+        } else {
+            revert("Invalid application status");
         }
     }
 
@@ -476,6 +461,8 @@ contract BountyBay {
             _proposedReward != 0 || _proposedDeadline != 0 || _validUntil != 0,
             "Must edit at least one field"
         );
+        // TODO: also check for bounty status?
+
         Application storage application = applicationByBountyIdAndAddress[
             msg.sender
         ][_bountyId];
