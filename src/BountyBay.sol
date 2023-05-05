@@ -21,7 +21,8 @@ contract BountyBay {
         UNINITIALIZED,
         PENDING,
         NOMINATED,
-        ACCEPTED,
+        IN_PROGRESS,
+        UNDER_REVIEW,
         CANCELED,
         CANCELED_AFTER_NOMINATION_BY_HUNTER,
         CANCELED_AFTER_NOMINATION_BY_CREATOR,
@@ -30,11 +31,12 @@ contract BountyBay {
     }
 
     struct Bounty {
+        // Keep reference to Application instead of hunter, nominatedHunter, realisationProof (?)
         uint256 id;
         BountyStatus status;
         address creator;
-        address hunter;
-        address nominatedHunter;
+        // address hunter;
+        // address nominatedHunter;
         address validator;
         address token;
         string name;
@@ -47,11 +49,13 @@ contract BountyBay {
         uint256 validatorReward;
         uint256 minHunterReputation;
         uint256 minHunterDeposit;
-        address[] hunterCandidates;
+        // address[] hunterCandidates;
+        uint256[] applicationIds;
         uint256 nominationAcceptanceDeadline;
         string realisationProof;
         uint8 hunterDepositDecreasePerDayAfterAcceptance;
         uint8 hunterRewardDecreasePerDayAfterDeadline;
+        Application application;
     }
 
     struct User {
@@ -75,14 +79,18 @@ contract BountyBay {
         uint256 proposedReward;
         uint256 validUntil;
         uint256 acceptedAt;
+        uint256 addedToReviewAt;
         ApplicationStatus status;
+        uint256 id;
     }
 
-    mapping(address => mapping(uint256 => Application))
-        private applicationByBountyIdAndAddress;
+    mapping(address => mapping(uint256 => uint256))
+        private applicationIdByBountyIdAndAddress;
     address public admin;
     uint256 private bountyId;
+    uint256 private applicationId = 1;
     mapping(uint256 => Bounty) private bountyById;
+    mapping(uint256 => Application) private applicationById;
     mapping(uint256 => address) private creatorByBountyId;
     mapping(uint256 => address) private hunterByBountyId;
     mapping(uint256 => address) private validatorByBountyId;
@@ -143,8 +151,8 @@ contract BountyBay {
             bountyId,
             BountyStatus.OPEN,
             msg.sender,
-            ZERO_ADDRESS,
-            ZERO_ADDRESS,
+            // ZERO_ADDRESS,
+            // ZERO_ADDRESS,
             ZERO_ADDRESS,
             _token,
             _name,
@@ -157,11 +165,22 @@ contract BountyBay {
             _validatorReward,
             _minHunterReputation,
             _minHunterDeposit,
-            new address[](0),
+            new uint256[](0),
             0,
             "",
             _refundDecreasePerDayAfterAcceptance,
-            _rewardDecreasePerDayAfterDeadline
+            _rewardDecreasePerDayAfterDeadline,
+            Application(
+                ZERO_ADDRESS,
+                bountyId,
+                0,
+                0,
+                0,
+                0,
+                0,
+                ApplicationStatus.UNINITIALIZED,
+                0
+            )
         );
 
         uint256 totalAmount = bounty.validatorReward + bounty.hunterReward;
@@ -207,63 +226,67 @@ contract BountyBay {
         require(_validUntil >= block.timestamp, "Too late");
 
         require(
-            applicationByBountyIdAndAddress[msg.sender][_bountyId].hunter ==
-                address(0),
+            applicationIdByBountyIdAndAddress[msg.sender][_bountyId] == 0,
             "Already applied"
         );
 
-        applicationByBountyIdAndAddress[msg.sender][_bountyId] = Application(
+        applicationById[applicationId] = Application(
             msg.sender,
             _bountyId,
             _proposedDeadline,
             _proposedReward,
             _validUntil,
             0,
-            ApplicationStatus.PENDING
+            0,
+            ApplicationStatus.PENDING,
+            applicationId
         );
-
-        bounty.hunterCandidates.push(msg.sender);
+        applicationIdByBountyIdAndAddress[msg.sender][
+            _bountyId
+        ] = applicationId;
+        bounty.applicationIds.push(applicationId);
+        applicationId++;
     }
 
-    function nominateCandidate(
-        uint256 _bountyId,
-        address _nominatedAddress
+    function nominateApplication(
+        uint256 _applicationId // address _nominatedAddress
     ) external {
-        Bounty storage bounty = bountyById[_bountyId];
+        require(_applicationId != 0, "Invalid application id");
+        Application storage application = applicationById[_applicationId];
+        Bounty storage bounty = bountyById[application.bountyId];
         require(bounty.status == BountyStatus.OPEN, "Bounty not open");
         require(bounty.creator == msg.sender, "Not bounty creator");
-        require(msg.sender != _nominatedAddress, "Cannot nominate yourself");
-        Application storage application = applicationByBountyIdAndAddress[
-            _nominatedAddress
-        ][_bountyId];
-        require(application.hunter != address(0), "Not hunter candidate");
         require(
             application.validUntil >= block.timestamp,
             "Application no longer valid"
         );
         // TODO : Adjust creator balances regarding application proposed reward
         application.status = ApplicationStatus.NOMINATED;
+        bounty.application = application;
         bounty.nominationAcceptanceDeadline =
             block.timestamp +
             bounty.nominationAcceptanceTime;
-        bounty.nominatedHunter = _nominatedAddress;
+        // Status probably redundant = duplication with ApplicationStatus
         bounty.status = BountyStatus.HUNTER_NOMINATED;
     }
 
-    function acceptNomination(uint256 _bountyId) external {
-        Bounty storage bounty = bountyById[_bountyId];
+    function acceptNomination(uint256 _applicationId) external {
+        Application storage application = applicationById[_applicationId];
+        require(application.status == ApplicationStatus.NOMINATED);
+        Bounty storage bounty = bountyById[application.bountyId];
+        // Status probably redundant = duplication with ApplicationStatus
         require(
             bounty.status == BountyStatus.HUNTER_NOMINATED,
             "Incorrect bounty status"
         );
-        require(bounty.nominatedHunter == msg.sender, "Must be nominated");
+        // require(bounty.nominatedHunter == msg.sender, "Must be nominated");
         require(
             bounty.nominationAcceptanceDeadline >= block.timestamp,
             "Acceptance deadline passed"
         );
-        Application storage application = applicationByBountyIdAndAddress[
-            msg.sender
-        ][_bountyId];
+        // Application storage application = applicationByBountyIdAndAddress[
+        //     msg.sender
+        // ][_bountyId];
         address token = bounty.token;
         uint256 totalAmount = bounty.validatorReward + bounty.minHunterDeposit;
         if (claimableTokenBalanceByUser[msg.sender][token] >= totalAmount) {
@@ -277,7 +300,7 @@ contract BountyBay {
             require(success, "Error transfering funds");
         }
         tokenBalanceByUser[msg.sender][token] += totalAmount;
-        application.status = ApplicationStatus.ACCEPTED;
+        application.status = ApplicationStatus.IN_PROGRESS;
         application.acceptedAt = block.timestamp;
         bounty.hunterReward = application.proposedReward;
         bounty.deadline = application.proposedDeadline;
@@ -285,10 +308,8 @@ contract BountyBay {
         bounty.status = BountyStatus.IN_PROGRESS;
     }
 
-    function cancelApplication(uint256 _bountyId) external {
-        Application storage application = applicationByBountyIdAndAddress[
-            msg.sender
-        ][_bountyId];
+    function cancelApplication(uint256 _applicationId) external {
+        Application storage application = applicationById[_applicationId];
         ApplicationStatus status = application.status;
 
         if (status == ApplicationStatus.PENDING) {
@@ -296,17 +317,14 @@ contract BountyBay {
         } else if (status == ApplicationStatus.NOMINATED) {
             application.status = ApplicationStatus
                 .CANCELED_AFTER_NOMINATION_BY_HUNTER;
-            Bounty storage bounty = bountyById[_bountyId];
-            bounty.nominatedHunter = ZERO_ADDRESS;
+            Bounty storage bounty = bountyById[application.bountyId];
             bounty.nominationAcceptanceDeadline = 0;
             bounty.status = BountyStatus.OPEN;
             userByAddress[msg.sender].canceledAfterNomination += 1;
         } else if (status == ApplicationStatus.ACCEPTED) {
             application.status ==
                 ApplicationStatus.CANCELED_AFTER_ACCEPTANCE_BY_HUNTER;
-            Bounty storage bounty = bountyById[_bountyId];
-            bounty.hunter = ZERO_ADDRESS;
-            bounty.nominatedHunter = ZERO_ADDRESS;
+            Bounty storage bounty = bountyById[application.bountyId];
             bounty.nominationAcceptanceDeadline = 0;
             bounty.status = BountyStatus.OPEN;
             userByAddress[msg.sender].canceledAfterAcceptance += 1;
@@ -346,51 +364,54 @@ contract BountyBay {
         }
     }
 
-    function cancelCandidateNomination(uint256 _bountyId) external {
-        Bounty storage bounty = bountyById[_bountyId];
+    function cancelApplicationNomination(uint256 _applicationId) external {
+        Application storage application = applicationById[_applicationId];
+        require(application.status == ApplicationStatus.NOMINATED);
+        Bounty storage bounty = bountyById[application.bountyId];
+        // Status probably redundant
         require(
             bounty.status == BountyStatus.HUNTER_NOMINATED,
             "Bounty not open"
         );
         require(bounty.creator == msg.sender, "Not bounty creator");
-        Application storage application = applicationByBountyIdAndAddress[
-            bounty.nominatedHunter
-        ][_bountyId];
         application.status = ApplicationStatus
             .CANCELED_AFTER_NOMINATION_BY_CREATOR;
-        bounty.nominatedHunter = ZERO_ADDRESS;
         bounty.nominationAcceptanceDeadline = 0;
+        // Status probrably redundant
         bounty.status = BountyStatus.OPEN;
     }
 
-    function addBountyToReview(
-        uint256 _bountyId,
+    function addApplicationToReview(
+        uint256 _applicationId,
         string calldata _realisationProof
     ) external {
-        Bounty storage bounty = bountyById[_bountyId];
+        Application storage application = applicationById[_applicationId];
+        require(application.status == ApplicationStatus.IN_PROGRESS);
+        Bounty storage bounty = bountyById[application.bountyId];
+        // Check probrably redundant after status deletion
         require(
             bounty.status == BountyStatus.IN_PROGRESS,
             "Bounty not in progress"
         );
-        require(bounty.hunter == msg.sender, "Not bounty hunter");
-        require(bounty.deadline >= block.timestamp, "Deadline passed");
+        // Check probrably redundant - Application may be added after deadline
+        // require(bounty.deadline >= block.timestamp, "Deadline passed");
+        application.addedToReviewAt = block.timestamp;
+        application.status = ApplicationStatus.UNDER_REVIEW;
         bounty.realisationProof = _realisationProof;
+        // Status probrably redundant
         bounty.status = BountyStatus.REVIEW;
     }
 
     function getBountyApplications(
         uint256 _bountyId
     ) external view returns (Application[] memory) {
-        address[] memory hunterCandidates = bountyById[_bountyId]
-            .hunterCandidates;
-        uint256 applicationsCount = hunterCandidates.length;
+        address[] memory applicationIds = bountyById[_bountyId].applicationIds;
+        uint256 applicationsCount = applicationIds.length;
         Application[] memory applications = new Application[](
             applicationsCount
         );
         for (uint256 i; i < applicationsCount; i++) {
-            applications[i] = applicationByBountyIdAndAddress[
-                hunterCandidates[i]
-            ][_bountyId];
+            applications[i] = applicationById[i];
         }
         return applications;
     }
