@@ -301,6 +301,21 @@ contract BountyBay {
                 0,
                 CanceledBy.NONE,
                 0
+            ),
+            Realisation(
+                ZERO_ADDRESS,
+                bountyId,
+                // Realisation.id probably unnecessary, because it's always equall to bountyId
+                bountyId,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                CanceledBy.NONE,
+                ""
             )
         );
 
