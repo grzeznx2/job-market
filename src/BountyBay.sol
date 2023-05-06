@@ -163,7 +163,6 @@ contract BountyBay {
         uint256 minHunterReputation;
         uint256 minHunterDeposit;
         uint256[] applicationIds;
-        string realisationProof;
         uint8 hunterDepositDecreasePerDayAfterAcceptance;
         uint8 hunterRewardDecreasePerDayAfterDeadline;
         Application application;
@@ -311,7 +310,6 @@ contract BountyBay {
             _minHunterReputation,
             _minHunterDeposit,
             new uint256[](0),
-            "",
             _refundDecreasePerDayAfterAcceptance,
             _rewardDecreasePerDayAfterDeadline,
             Application(
@@ -460,6 +458,7 @@ contract BountyBay {
         require(application.hunter == msg.sender, "Not bounty hunter");
         ApplicationStatus status = getApplicationStatus(application);
         require(
+            // TODO: add cancelRealisation method and remove ApplicationStatus.ACCEPTED from here
             status == ApplicationStatus.ACCEPTED ||
                 status == ApplicationStatus.NOMINATED ||
                 status == ApplicationStatus.OPEN_TO_NOMINATION,
@@ -468,6 +467,7 @@ contract BountyBay {
         application.canceledAt = block.timestamp;
         application.canceledBy = CanceledBy.HUNTER;
         if (status == ApplicationStatus.NOMINATED) {
+            // TODO: rename to canceledNominationsCount and canceledRealisationsCount
             userByAddress[msg.sender].canceledAfterNomination += 1;
         } else if (status == ApplicationStatus.ACCEPTED) {
             Bounty storage bounty = bountyById[application.bountyId];
@@ -509,33 +509,28 @@ contract BountyBay {
     function cancelApplicationNomination(uint256 _applicationId) external {
         Application storage application = applicationById[_applicationId];
         require(
-            getBountyApplicationStatus(application) ==
-                ApplicationStatus.NOMINATED,
+            getApplicationStatus(application) == ApplicationStatus.NOMINATED,
             "Invalid application status"
         );
         Bounty storage bounty = bountyById[application.bountyId];
         require(bounty.creator == msg.sender, "Not bounty creator");
         application.canceledAt = block.timestamp;
         application.canceledBy = CanceledBy.CREATOR;
-        bounty.nominationAcceptanceDeadline = 0;
     }
 
-    function addApplicationToReview(
-        uint256 _applicationId,
+    function addRealisationToReview(
+        uint256 _realisationId,
         string calldata _realisationProof
     ) external {
-        Application storage application = applicationById[_applicationId];
+        Realisation storage realisation = realisationById[_realisationId];
         require(
-            getBountyApplicationStatus(application) ==
-                ApplicationStatus.IN_PROGRESS,
-            "Invalid application status"
+            getRealisationStatus(realisation) == RealisationStatus.IN_PROGRESS,
+            "Invalid realisation status"
         );
-        require(application.hunter == msg.sender, "Not bounty hunter");
-        Bounty storage bounty = bountyById[application.bountyId];
-        // Check probrably redundant - Application may be added after deadline
-        // require(bounty.deadline >= block.timestamp, "Deadline passed");
-        application.addedToReviewAt = block.timestamp;
-        bounty.realisationProof = _realisationProof;
+        require(realisation.hunter == msg.sender, "Not bounty hunter");
+        Bounty storage bounty = bountyById[realisation.bountyId];
+        realisation.addedToReviewAt = block.timestamp;
+        realisation.realisationProof = _realisationProof;
     }
 
     function getBountyApplications(
