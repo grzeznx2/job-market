@@ -17,6 +17,77 @@ contract BountyBay {
         ENDED
     }
 
+    enum ApplicationCanceledBy {
+        NONE,
+        HUNTER,
+        CREATOR
+    }
+
+    function getApplicationStatus(
+        Application memory _application
+    ) internal returns (ApplicationStatus) {
+        if (_application.hunter == ZERO_ADDRESS) {
+            return ApplicationStatus.UNINITIALIZED;
+        } else if (
+            _application.hunter != ZERO_ADDRESS &&
+            _application.nominationAcceptedAt == 0
+        ) {
+            return ApplicationStatus.NOMINATED;
+        } else if (
+            _application.nominationAcceptedAt != 0 &&
+            _application.addedToReviewAt == 0
+        ) {
+            return ApplicationStatus.IN_PROGRESS;
+        } else if (
+            _application.addedToReviewAt != 0 &&
+            _application.realisationAcceptedAt == 0 &&
+            _application.realisationRejectedAt == 0
+        ) {
+            return ApplicationStatus.UNDER_REVIEW;
+        } else if (_application.realisationAcceptedAt != 0) {
+            return ApplicationStatus.ACCEPTED;
+        } else if (
+            _application.realisationRejectedAt != 0 &&
+            _application.passedToValidationAt == 0
+        ) {
+            return ApplicationStatus.NOT_ACCEPTED;
+        } else if (
+            _application.passedToValidationAt != 0 &&
+            _application.validatedAt == 0
+        ) {
+            return ApplicationStatus.UNDER_VALIDATION;
+        } else if (
+            _application.validatedAt != 0 ||
+            _application.rejectionAcceptedAt != 0
+        ) {
+            return ApplicationStatus.ENDED;
+        } else if (_application.canceledAt != 0) {
+            if (_application.canceledBy == ApplicationCanceledBy.HUNTER) {
+                if (_application.nominatedAt != 0) {
+                    if (_application.nominationAcceptedAt == 0) {
+                        return
+                            ApplicationStatus
+                                .CANCELED_AFTER_NOMINATION_BY_HUNTER;
+                    } else {
+                        return
+                            ApplicationStatus
+                                .CANCELED_AFTER_ACCEPTANCE_BY_HUNTER;
+                    }
+                } else {
+                    return ApplicationStatus.CANCELED;
+                }
+            } else {
+                if (_application.nominationAcceptedAt == 0) {
+                    return
+                        ApplicationStatus.CANCELED_AFTER_NOMINATION_BY_CREATOR;
+                } else {
+                    return
+                        ApplicationStatus.CANCELED_AFTER_ACCEPTANCE_BY_CREATOR;
+                }
+            }
+        }
+    }
+
     enum ApplicationStatus {
         UNINITIALIZED,
         PENDING,
@@ -79,6 +150,7 @@ contract BountyBay {
         uint256 proposedDeadline;
         uint256 proposedReward;
         uint256 validUntil;
+        uint256 nominatedAt;
         uint256 nominationAcceptedAt;
         uint256 addedToReviewAt;
         uint256 realisationAcceptedAt;
@@ -87,6 +159,7 @@ contract BountyBay {
         uint256 passedToValidationAt;
         uint256 validatedAt;
         uint256 canceledAt;
+        ApplicationCanceledBy canceledBy;
         ApplicationStatus status;
         uint256 id;
     }
@@ -186,6 +259,8 @@ contract BountyBay {
                 0,
                 0,
                 0,
+                0,
+                ApplicationCanceledBy.NONE,
                 ApplicationStatus.UNINITIALIZED,
                 0
             )
@@ -220,6 +295,7 @@ contract BountyBay {
     ) external {
         User memory user = userByAddress[msg.sender];
         Bounty storage bounty = bountyById[_bountyId];
+        require(bounty.status == BountyStatus.OPEN, "Invalid bounty status");
         require(bounty.creator != msg.sender, "Cannot apply for own bounty");
         require(bounty.status == BountyStatus.OPEN, "Bounty not open");
         require(
@@ -252,6 +328,8 @@ contract BountyBay {
             0,
             0,
             0,
+            0,
+            ApplicationCanceledBy.NONE,
             ApplicationStatus.PENDING,
             applicationId
         );
@@ -262,7 +340,9 @@ contract BountyBay {
         applicationId++;
     }
 
-    function nominateApplication(uint256 _applicationId) external {
+    function nominateApplication(
+        uint256 _applicationId // address _nominatedAddress
+    ) external {
         require(_applicationId != 0, "Invalid application id");
         Application storage application = applicationById[_applicationId];
         Bounty storage bounty = bountyById[application.bountyId];
@@ -274,6 +354,7 @@ contract BountyBay {
         );
         // TODO : Adjust creator balances regarding application proposed reward
         application.status = ApplicationStatus.NOMINATED;
+        application.nominatedAt = block.timestamp;
         bounty.application = application;
         bounty.nominationAcceptanceDeadline =
             block.timestamp +
@@ -325,6 +406,7 @@ contract BountyBay {
         ApplicationStatus status = application.status;
         require(application.hunter == msg.sender, "Not bounty hunter");
         application.canceledAt = block.timestamp;
+        application.canceledBy = ApplicationCanceledBy.HUNTER;
         if (status == ApplicationStatus.PENDING) {
             application.status = ApplicationStatus.CANCELED;
         } else if (status == ApplicationStatus.NOMINATED) {
@@ -387,6 +469,8 @@ contract BountyBay {
             "Bounty not open"
         );
         require(bounty.creator == msg.sender, "Not bounty creator");
+        application.canceledAt = block.timestamp;
+        application.canceledBy = ApplicationCanceledBy.CREATOR;
         application.status = ApplicationStatus
             .CANCELED_AFTER_NOMINATION_BY_CREATOR;
         bounty.nominationAcceptanceDeadline = 0;
