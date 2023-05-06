@@ -615,16 +615,16 @@ contract BountyBay {
         realisation.realisationAcceptedAt = block.timestamp;
     }
 
-    function rejectApplicationRealisation(uint256 _bountyId) external {
-        // Check which approach is more gase efficient => here we get bounty by id instead of getting application first
-        Bounty storage bounty = bountyById[_bountyId];
-        require(bounty.creator == msg.sender, "Not bounty creator");
+    function rejectRealisation(uint256 _realisationId) external {
+        Realisation storage realisation = realisationById[_realisationId];
         require(
-            getBountyApplicationStatus(bounty.application) ==
-                ApplicationStatus.UNDER_REVIEW,
-            "Invalid application status"
+            getRealisationStatus(realisation) == RealisationStatus.UNDER_REVIEW,
+            "Invalid realisation status"
         );
-        bounty.application.realisationRejectedAt = block.timestamp;
+        Bounty storage bounty = bountyById[realisation.bountyId];
+
+        require(bounty.creator == msg.sender, "Not bounty creator");
+        realisation.realisationRejectedAt = block.timestamp;
     }
 
     function acceptApplicationCompletionRejection(
