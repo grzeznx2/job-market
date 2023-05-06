@@ -26,6 +26,17 @@ contract BountyBay {
         CANCELED_AFTER_NOMINATION_BY_CREATOR
     }
 
+    enum RealisationStatus {
+        IN_PROGRESS,
+        UNDER_REVIEW,
+        ACCEPTED,
+        NOT_ACCEPTED,
+        UNDER_VALIDATION,
+        ENDED,
+        CANCELED_BY_HUNTER,
+        CANCELED_BY_CREATOR
+    }
+
     enum CanceledBy {
         NONE,
         HUNTER,
@@ -174,6 +185,21 @@ contract BountyBay {
         uint256 canceledAt;
         CanceledBy canceledBy;
         uint256 id;
+    }
+
+    struct Realisation {
+        address hunter;
+        uint256 bountyId;
+        uint256 id;
+        uint256 addedToReviewAt;
+        uint256 realisationAcceptedAt;
+        uint256 realisationRejectedAt;
+        uint256 rejectionAcceptedAt;
+        uint256 passedToValidationAt;
+        uint256 validatedAt;
+        uint256 canceledAt;
+        CanceledBy canceledBy;
+        string realisationProof;
     }
 
     mapping(address => mapping(uint256 => uint256))
