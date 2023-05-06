@@ -657,15 +657,14 @@ contract BountyBay {
         realisation.rejectionAcceptedAt = block.timestamp;
     }
 
-    function passApplicationToValidation(uint256 _applicationId) external {
-        Application storage application = applicationById[_applicationId];
-        require(application.hunter == msg.sender, "Not bounty hunter");
+    function passRealisationToValidation(uint256 _realisationId) external {
+        Realisation storage realisation = realisationById[_realisationId];
+        require(realisation.hunter == msg.sender, "Not bounty hunter");
         require(
-            getBountyApplicationStatus(application) ==
-                ApplicationStatus.NOT_ACCEPTED,
-            "Invalid application status"
+            getRealisationStatus(realisation) == RealisationStatus.NOT_ACCEPTED,
+            "Invalid realisation status"
         );
-        application.passedToValidationAt = block.timestamp;
+        realisation.passedToValidationAt = block.timestamp;
     }
 
     function updateApplication(
