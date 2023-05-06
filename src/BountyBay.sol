@@ -430,9 +430,27 @@ contract BountyBay {
             application.validUntil >= block.timestamp,
             "Application no longer valid"
         );
-        // TODO : Adjust creator balances regarding application proposed reward
         application.nominatedAt = block.timestamp;
         bounty.application = application;
+        if (application.proposedReward > bounty.hunterReward) {
+            uint256 missingReward = application.proposedReward -
+                bounty.hunterReward;
+            address token = bounty.token;
+
+            if (
+                claimableTokenBalanceByUser[msg.sender][token] >= missingReward
+            ) {
+                claimableTokenBalanceByUser[msg.sender][token] -= missingReward;
+            } else {
+                bool success = IERC20(token).transferFrom(
+                    msg.sender,
+                    address(this),
+                    missingReward
+                );
+                require(success, "Error transfering funds");
+            }
+            tokenBalanceByUser[msg.sender][token] += missingReward;
+        }
         // TODO: This should probably go to Application
         bounty.nominationAcceptanceDeadline =
             block.timestamp +
