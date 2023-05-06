@@ -31,7 +31,8 @@ contract BountyBay {
         ACCEPTED,
         CANCELED_BEFORE_NOMINATION,
         CANCELED_AFTER_NOMINATION_BY_HUNTER,
-        CANCELED_AFTER_NOMINATION_BY_CREATOR
+        CANCELED_AFTER_NOMINATION_BY_CREATOR,
+        EXPIRED
     }
 
     enum RealisationStatus {
@@ -70,6 +71,8 @@ contract BountyBay {
             return ApplicationStatus.ACCEPTED;
         } else if (_application.nominatedAt != 0) {
             return ApplicationStatus.NOMINATED;
+        } else if (_application.validUntil < block.timestamp) {
+            return ApplicationStatus.EXPIRED;
         } else {
             return ApplicationStatus.OPEN_TO_NOMINATION;
         }
@@ -160,7 +163,6 @@ contract BountyBay {
         uint256 minHunterReputation;
         uint256 minHunterDeposit;
         uint256[] applicationIds;
-        // uint256 nominationAcceptanceDeadline;
         string realisationProof;
         uint8 hunterDepositDecreasePerDayAfterAcceptance;
         uint8 hunterRewardDecreasePerDayAfterDeadline;
@@ -413,10 +415,6 @@ contract BountyBay {
             "Invalid application status"
         );
         require(bounty.creator == msg.sender, "Not bounty creator");
-        require(
-            application.validUntil >= block.timestamp,
-            "Application no longer valid"
-        );
         application.nominatedAt = block.timestamp;
         bounty.application = application;
         if (application.proposedReward > bounty.hunterReward) {
