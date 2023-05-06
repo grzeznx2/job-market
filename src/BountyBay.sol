@@ -23,14 +23,15 @@ contract BountyBay {
         NOMINATED,
         IN_PROGRESS,
         UNDER_REVIEW,
+        ACCEPTED,
+        NOT_ACCEPTED,
+        UNDER_VALIDATION,
+        ENDED,
         CANCELED,
         CANCELED_AFTER_NOMINATION_BY_HUNTER,
         CANCELED_AFTER_NOMINATION_BY_CREATOR,
         CANCELED_AFTER_ACCEPTANCE_BY_HUNTER,
-        CANCELED_AFTER_ACCEPTANCE_BY_CREATOR,
-        ACCEPTED,
-        NOT_ACCEPTED,
-        ENDED
+        CANCELED_AFTER_ACCEPTANCE_BY_CREATOR
     }
 
     struct Bounty {
@@ -38,8 +39,6 @@ contract BountyBay {
         uint256 id;
         BountyStatus status;
         address creator;
-        // address hunter;
-        // address nominatedHunter;
         address validator;
         address token;
         string name;
@@ -52,7 +51,6 @@ contract BountyBay {
         uint256 validatorReward;
         uint256 minHunterReputation;
         uint256 minHunterDeposit;
-        // address[] hunterCandidates;
         uint256[] applicationIds;
         uint256 nominationAcceptanceDeadline;
         string realisationProof;
@@ -81,8 +79,14 @@ contract BountyBay {
         uint256 proposedDeadline;
         uint256 proposedReward;
         uint256 validUntil;
-        uint256 acceptedAt;
+        uint256 nominationAcceptedAt;
         uint256 addedToReviewAt;
+        uint256 realisationAcceptedAt;
+        uint256 realisationRejectedAt;
+        uint256 rejectionAcceptedAt;
+        uint256 passedToValidationAt;
+        uint256 validatedAt;
+        uint256 canceledAt;
         ApplicationStatus status;
         uint256 id;
     }
@@ -100,9 +104,6 @@ contract BountyBay {
     mapping(address => User) private userByAddress;
     uint256[] private bountyIds;
     mapping(address => uint256[]) private bountyIdsByCreator;
-    // uint256 public minBountyRealizationTime = 3 days;
-    // uint256 public minNominationAcceptanceTime = 1 days;
-    // uint256 public minReviewPeriodTime = 1 days;
     mapping(address => bool) public isWhitelistedToken;
     mapping(address => mapping(address => uint256)) private tokenBalanceByUser;
     mapping(address => mapping(address => uint256))
@@ -154,8 +155,6 @@ contract BountyBay {
             bountyId,
             BountyStatus.OPEN,
             msg.sender,
-            // ZERO_ADDRESS,
-            // ZERO_ADDRESS,
             ZERO_ADDRESS,
             _token,
             _name,
@@ -176,6 +175,12 @@ contract BountyBay {
             Application(
                 ZERO_ADDRESS,
                 bountyId,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
                 0,
                 0,
                 0,
@@ -241,6 +246,12 @@ contract BountyBay {
             _validUntil,
             0,
             0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
             ApplicationStatus.PENDING,
             applicationId
         );
@@ -251,9 +262,7 @@ contract BountyBay {
         applicationId++;
     }
 
-    function nominateApplication(
-        uint256 _applicationId // address _nominatedAddress
-    ) external {
+    function nominateApplication(uint256 _applicationId) external {
         require(_applicationId != 0, "Invalid application id");
         Application storage application = applicationById[_applicationId];
         Bounty storage bounty = bountyById[application.bountyId];
@@ -305,7 +314,7 @@ contract BountyBay {
         }
         tokenBalanceByUser[msg.sender][token] += totalAmount;
         application.status = ApplicationStatus.IN_PROGRESS;
-        application.acceptedAt = block.timestamp;
+        application.nominationAcceptedAt = block.timestamp;
         bounty.hunterReward = application.proposedReward;
         bounty.deadline = application.proposedDeadline;
         bounty.status = BountyStatus.IN_PROGRESS;
@@ -315,7 +324,7 @@ contract BountyBay {
         Application storage application = applicationById[_applicationId];
         ApplicationStatus status = application.status;
         require(application.hunter == msg.sender, "Not bounty hunter");
-
+        application.canceledAt = block.timestamp;
         if (status == ApplicationStatus.PENDING) {
             application.status = ApplicationStatus.CANCELED;
         } else if (status == ApplicationStatus.NOMINATED) {
@@ -334,7 +343,7 @@ contract BountyBay {
             userByAddress[msg.sender].canceledAfterAcceptance += 1;
 
             uint256 daysSinceAcceptance = getDaysFromNow(
-                application.acceptedAt
+                application.nominationAcceptedAt
             );
             // +1: 0 days counts as 1
             uint256 percentageLostByHunter = (daysSinceAcceptance + 1) *
@@ -491,9 +500,10 @@ contract BountyBay {
         // status probably redundant
         bounty.status = BountyStatus.ACCEPTED;
         application.status = ApplicationStatus.ACCEPTED;
+        application.realisationAcceptedAt = block.timestamp;
     }
 
-    function rejectBountyCompletion(uint256 _bountyId) external {
+    function rejectApplicationRealisation(uint256 _bountyId) external {
         // Check which approach is more gase efficient => here we get bounty by id instead of getting application first
         Bounty storage bounty = bountyById[_bountyId];
         require(bounty.creator == msg.sender, "Not bounty creator");
@@ -509,6 +519,7 @@ contract BountyBay {
 
         // Status probrably redundant
         bounty.status = BountyStatus.NOT_ACCEPTED;
+        bounty.application.realisationRejectedAt = block.timestamp;
         bounty.application.status = ApplicationStatus.NOT_ACCEPTED;
     }
 
@@ -546,19 +557,18 @@ contract BountyBay {
 
         bounty.status = BountyStatus.ENDED;
         application.status = ApplicationStatus.ENDED;
+        application.rejectionAcceptedAt = block.timestamp;
     }
 
-    function passBountyToValidation(uint256 _bountyId) external {
-        // TODO: bounty or application?
-        Bounty storage bounty = bountyById[_bountyId];
-
-        require(bounty.application.hunter == msg.sender, "Not bounty hunter");
+    function passApplicationToValidation(uint256 _applicationId) external {
+        Application storage application = applicationById[_applicationId];
+        require(application.hunter == msg.sender, "Not bounty hunter");
         require(
-            bounty.status == BountyStatus.NOT_ACCEPTED,
-            "Bounty not rejected"
+            application.status == ApplicationStatus.NOT_ACCEPTED,
+            "Invalid application status"
         );
-
-        bounty.status = BountyStatus.VALIDATING;
+        application.status = ApplicationStatus.UNDER_VALIDATION;
+        application.passedToValidationAt = block.timestamp;
     }
 
     function updateApplication(
