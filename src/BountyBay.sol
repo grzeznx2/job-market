@@ -67,6 +67,41 @@ contract BountyBay {
         }
     }
 
+    function getRealisationStatus(
+        Realisation memory _realisation
+    ) internal pure returns (RealisationStatus) {
+        if (_realisation.canceledAt != 0) {
+            if (_realisation.canceledBy == CanceledBy.HUNTER) {
+                return RealisationStatus.CANCELED_BY_HUNTER;
+            } else {
+                return RealisationStatus.CANCELED_BY_CREATOR;
+            }
+        } else if (
+            _realisation.validatedAt != 0 ||
+            _realisation.rejectionAcceptedAt != 0
+        ) {
+            return RealisationStatus.ENDED;
+        } else if (
+            _realisation.passedToValidationAt != 0 &&
+            _realisation.validatedAt == 0
+        ) {
+            return RealisationStatus.UNDER_VALIDATION;
+        } else if (
+            _realisation.realisationRejectedAt != 0 &&
+            _realisation.passedToValidationAt == 0
+        ) {
+            return RealisationStatus.NOT_ACCEPTED;
+        } else if (_realisation.realisationAcceptedAt != 0) {
+            return RealisationStatus.ACCEPTED;
+        } else if (
+            _realisation.addedToReviewAt != 0 &&
+            _realisation.realisationAcceptedAt == 0 &&
+            _realisation.realisationRejectedAt == 0
+        ) {
+            return RealisationStatus.UNDER_REVIEW;
+        } else return RealisationStatus.IN_PROGRESS;
+    }
+
     function getBountyApplicationStatus(
         Application memory _application
     ) internal pure returns (ApplicationStatus) {
