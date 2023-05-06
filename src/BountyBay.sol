@@ -26,17 +26,41 @@ contract BountyBay {
         CANCELED_AFTER_NOMINATION_BY_CREATOR
     }
 
-    enum ApplicationCanceledBy {
+    enum CanceledBy {
         NONE,
         HUNTER,
         CREATOR
+    }
+
+    function getApplicationStatus(
+        Application memory _application
+    ) internal pure returns (ApplicationStatus) {
+        if (_application.canceledAt != 0) {
+            if (_application.nominatedAt != 0) {
+                if (_application.canceledBy == CanceledBy.HUNTER) {
+                    return
+                        ApplicationStatus.CANCELED_AFTER_NOMINATION_BY_HUNTER;
+                } else {
+                    return
+                        ApplicationStatus.CANCELED_AFTER_NOMINATION_BY_CREATOR;
+                }
+            } else {
+                return ApplicationStatus.CANCELED_BEFORE_NOMINATION;
+            }
+        } else if (_application.nominationAcceptedAt != 0) {
+            return ApplicationStatus.ACCEPTED;
+        } else if (_application.nominatedAt != 0) {
+            return ApplicationStatus.NOMINATED;
+        } else {
+            return ApplicationStatus.OPEN_TO_NOMINATION;
+        }
     }
 
     function getBountyApplicationStatus(
         Application memory _application
     ) internal pure returns (ApplicationStatus) {
         if (_application.canceledAt != 0) {
-            if (_application.canceledBy == ApplicationCanceledBy.HUNTER) {
+            if (_application.canceledBy == CanceledBy.HUNTER) {
                 if (_application.nominatedAt != 0) {
                     if (_application.nominationAcceptedAt == 0) {
                         return
@@ -148,7 +172,7 @@ contract BountyBay {
         uint256 passedToValidationAt;
         uint256 validatedAt;
         uint256 canceledAt;
-        ApplicationCanceledBy canceledBy;
+        CanceledBy canceledBy;
         uint256 id;
     }
 
@@ -247,7 +271,7 @@ contract BountyBay {
                 0,
                 0,
                 0,
-                ApplicationCanceledBy.NONE,
+                CanceledBy.NONE,
                 0
             )
         );
@@ -321,7 +345,7 @@ contract BountyBay {
             0,
             0,
             0,
-            ApplicationCanceledBy.NONE,
+            CanceledBy.NONE,
             applicationId
         );
         applicationIdByBountyIdAndAddress[msg.sender][
@@ -389,7 +413,7 @@ contract BountyBay {
         require(application.hunter == msg.sender, "Not bounty hunter");
         ApplicationStatus status = getBountyApplicationStatus(application);
         application.canceledAt = block.timestamp;
-        application.canceledBy = ApplicationCanceledBy.HUNTER;
+        application.canceledBy = CanceledBy.HUNTER;
         if (status == ApplicationStatus.OPEN_TO_NOMINATION) {} else if (
             status == ApplicationStatus.NOMINATED
         ) {
@@ -446,7 +470,7 @@ contract BountyBay {
         Bounty storage bounty = bountyById[application.bountyId];
         require(bounty.creator == msg.sender, "Not bounty creator");
         application.canceledAt = block.timestamp;
-        application.canceledBy = ApplicationCanceledBy.CREATOR;
+        application.canceledBy = CanceledBy.CREATOR;
         bounty.nominationAcceptanceDeadline = 0;
     }
 
