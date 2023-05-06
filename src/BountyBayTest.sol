@@ -4,25 +4,11 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract BountyBay {
     address constant ZERO_ADDRESS = address(0);
-    uint256 public minBountyNameLength = 3;
-    uint256 public maxBountyNameLength = 1000;
-    uint256 public minBountyDescriptionLength = 3;
-    uint256 public maxBountyDescriptionLength = 1000;
-    uint256 public minBountyAcceptanceCriteriaLength = 3;
-    uint256 public maxBountyAcceptanceCriteriaLength = 1000;
 
-    enum BountyStatus {
-        OPEN_FOR_APPLICATIONS,
-        APPLICATION_NOMINATED,
-        REALISATION_IN_PROGRESS,
-        REALISATION_UNDER_REVIEW,
-        REALISATION_ACCEPTED,
-        REALISATION_NOT_ACCEPTED,
-        REALISATION_UNDER_VALIDATION,
-        REALISATION_ENDED,
-        CANCELED_BEFORE_REALISATION,
-        REALISATION_CANCELED_BY_HUNTER,
-        REALISATION_CANCELED_BY_CREATOR
+    enum CanceledBy {
+        NONE,
+        HUNTER,
+        CREATOR
     }
 
     enum ApplicationStatus {
@@ -32,23 +18,6 @@ contract BountyBay {
         CANCELED_BEFORE_NOMINATION,
         CANCELED_AFTER_NOMINATION_BY_HUNTER,
         CANCELED_AFTER_NOMINATION_BY_CREATOR
-    }
-
-    enum RealisationStatus {
-        IN_PROGRESS,
-        UNDER_REVIEW,
-        ACCEPTED,
-        NOT_ACCEPTED,
-        UNDER_VALIDATION,
-        ENDED,
-        CANCELED_BY_HUNTER,
-        CANCELED_BY_CREATOR
-    }
-
-    enum CanceledBy {
-        NONE,
-        HUNTER,
-        CREATOR
     }
 
     function getApplicationStatus(
@@ -73,6 +42,17 @@ contract BountyBay {
         } else {
             return ApplicationStatus.OPEN_TO_NOMINATION;
         }
+    }
+
+    enum RealisationStatus {
+        IN_PROGRESS,
+        UNDER_REVIEW,
+        ACCEPTED,
+        NOT_ACCEPTED,
+        UNDER_VALIDATION,
+        ENDED,
+        CANCELED_BY_HUNTER,
+        CANCELED_BY_CREATOR
     }
 
     function getRealisationStatus(
@@ -143,6 +123,20 @@ contract BountyBay {
         } else return BountyStatus.OPEN_FOR_APPLICATIONS;
     }
 
+    enum BountyStatus {
+        OPEN_FOR_APPLICATIONS,
+        APPLICATION_NOMINATED,
+        REALISATION_IN_PROGRESS,
+        REALISATION_UNDER_REVIEW,
+        REALISATION_ACCEPTED,
+        REALISATION_NOT_ACCEPTED,
+        REALISATION_UNDER_VALIDATION,
+        REALISATION_ENDED,
+        CANCELED_BEFORE_REALISATION,
+        REALISATION_CANCELED_BY_HUNTER,
+        REALISATION_CANCELED_BY_CREATOR
+    }
+
     struct Bounty {
         uint256 id;
         address creator;
@@ -163,6 +157,7 @@ contract BountyBay {
         string realisationProof;
         uint8 hunterDepositDecreasePerDayAfterAcceptance;
         uint8 hunterRewardDecreasePerDayAfterDeadline;
+        uint256 canceledAt;
         Application application;
         Realisation realisation;
     }
@@ -253,27 +248,6 @@ contract BountyBay {
         uint8 _rewardDecreasePerDayAfterDeadline
     ) external {
         require(_deadline > block.timestamp, "Deadline must be in the future");
-        uint256 nameLength = bytes(_name).length;
-        uint256 descriptionLength = bytes(_description).length;
-        uint256 acceptanceCriteriaLength = bytes(_acceptanceCriteria).length;
-        require(nameLength >= minBountyNameLength, "Name too short");
-        require(nameLength <= minBountyNameLength, "Name too long");
-        require(
-            descriptionLength >= minBountyDescriptionLength,
-            "Description too short"
-        );
-        require(
-            descriptionLength <= minBountyDescriptionLength,
-            "Description too long"
-        );
-        require(
-            acceptanceCriteriaLength >= minBountyAcceptanceCriteriaLength,
-            "AcceptanceCriteria too short"
-        );
-        require(
-            acceptanceCriteriaLength <= minBountyAcceptanceCriteriaLength,
-            "AcceptanceCriteria too long"
-        );
         require(
             _nominationAcceptanceTime > 0,
             "Nomination acceptance time must be > 0"
@@ -314,6 +288,11 @@ contract BountyBay {
             Application(
                 ZERO_ADDRESS,
                 bountyId,
+                0,
+                0,
+                0,
+                0,
+                0,
                 0,
                 0,
                 0,
