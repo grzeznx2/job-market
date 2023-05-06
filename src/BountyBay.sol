@@ -6,15 +6,17 @@ contract BountyBay {
     address constant ZERO_ADDRESS = address(0);
 
     enum BountyStatus {
-        UNITIALIZED,
-        OPEN,
-        HUNTER_NOMINATED,
-        IN_PROGRESS,
-        REVIEW,
-        ACCEPTED,
-        NOT_ACCEPTED,
-        VALIDATING,
-        ENDED
+        OPEN_FOR_APPLICATIONS,
+        APPLICATION_NOMINATED,
+        REALISATION_IN_PROGRESS,
+        REALISATION_UNDER_REVIEW,
+        REALISATION_ACCEPTED,
+        REALISATION_NOT_ACCEPTED,
+        REALISATION_UNDER_VALIDATION,
+        REALISATION_ENDED,
+        CANCELED_BEFORE_REALISATION,
+        REALISATION_CANCELED_BY_HUNTER,
+        REALISATION_CANCELED_BY_CREATOR
     }
 
     enum ApplicationStatus {
