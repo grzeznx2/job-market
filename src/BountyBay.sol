@@ -54,7 +54,7 @@ contract BountyBay {
 
     function getApplicationStatus(
         Application memory _application
-    ) internal pure returns (ApplicationStatus) {
+    ) internal view returns (ApplicationStatus) {
         if (_application.canceledAt != 0) {
             if (_application.nominatedAt != 0) {
                 if (_application.canceledBy == CanceledBy.HUNTER) {
@@ -115,7 +115,7 @@ contract BountyBay {
 
     function getBountyStatus(
         Bounty memory _bounty
-    ) internal pure returns (BountyStatus) {
+    ) internal view returns (BountyStatus) {
         Realisation memory realisation = _bounty.realisation;
         RealisationStatus realisationStatus = getRealisationStatus(realisation);
 
@@ -165,6 +165,8 @@ contract BountyBay {
         uint256[] applicationIds;
         uint8 hunterDepositDecreasePerDayAfterAcceptance;
         uint8 hunterRewardDecreasePerDayAfterDeadline;
+        // TODO: implement bounty cancellation
+        uint256 canceledAt;
         Application application;
         Realisation realisation;
     }
@@ -312,6 +314,7 @@ contract BountyBay {
             new uint256[](0),
             _refundDecreasePerDayAfterAcceptance,
             _rewardDecreasePerDayAfterDeadline,
+            0,
             Application(
                 ZERO_ADDRESS,
                 bountyId,
@@ -360,7 +363,7 @@ contract BountyBay {
         BountyStatus bountyStatus = getBountyStatus(bounty);
         require(
             bountyStatus == BountyStatus.OPEN_FOR_APPLICATIONS ||
-                bountyStatus.APPLICATION_NOMINATED,
+                bountyStatus == BountyStatus.APPLICATION_NOMINATED,
             "Ivalid bounty status"
         );
         require(bounty.creator != msg.sender, "Cannot apply for own bounty");
@@ -386,6 +389,7 @@ contract BountyBay {
             _proposedDeadline,
             _proposedReward,
             _validUntil,
+            0,
             0,
             0,
             0,
@@ -681,7 +685,7 @@ contract BountyBay {
         Application storage application = applicationById[_applicationId];
         require(application.hunter == msg.sender, "Not bounty hunter");
         require(
-            getBountyApplicationStatus(application) ==
+            getApplicationStatus(application) ==
                 ApplicationStatus.OPEN_TO_NOMINATION,
             "Invalid application status"
         );
