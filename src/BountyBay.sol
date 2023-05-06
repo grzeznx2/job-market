@@ -26,42 +26,7 @@ contract BountyBay {
     function getBountyApplicationStatus(
         Application memory _application
     ) internal pure returns (ApplicationStatus) {
-        if (_application.hunter == ZERO_ADDRESS) {
-            return ApplicationStatus.UNINITIALIZED;
-        } else if (
-            _application.hunter != ZERO_ADDRESS &&
-            _application.nominationAcceptedAt == 0
-        ) {
-            return ApplicationStatus.NOMINATED;
-        } else if (
-            _application.nominationAcceptedAt != 0 &&
-            _application.addedToReviewAt == 0
-        ) {
-            return ApplicationStatus.IN_PROGRESS;
-        } else if (
-            _application.addedToReviewAt != 0 &&
-            _application.realisationAcceptedAt == 0 &&
-            _application.realisationRejectedAt == 0
-        ) {
-            return ApplicationStatus.UNDER_REVIEW;
-        } else if (_application.realisationAcceptedAt != 0) {
-            return ApplicationStatus.ACCEPTED;
-        } else if (
-            _application.realisationRejectedAt != 0 &&
-            _application.passedToValidationAt == 0
-        ) {
-            return ApplicationStatus.NOT_ACCEPTED;
-        } else if (
-            _application.passedToValidationAt != 0 &&
-            _application.validatedAt == 0
-        ) {
-            return ApplicationStatus.UNDER_VALIDATION;
-        } else if (
-            _application.validatedAt != 0 ||
-            _application.rejectionAcceptedAt != 0
-        ) {
-            return ApplicationStatus.ENDED;
-        } else if (_application.canceledAt != 0) {
+        if (_application.canceledAt != 0) {
             if (_application.canceledBy == ApplicationCanceledBy.HUNTER) {
                 if (_application.nominatedAt != 0) {
                     if (_application.nominationAcceptedAt == 0) {
@@ -85,13 +50,44 @@ contract BountyBay {
                         ApplicationStatus.CANCELED_AFTER_ACCEPTANCE_BY_CREATOR;
                 }
             }
+        } else if (
+            _application.validatedAt != 0 ||
+            _application.rejectionAcceptedAt != 0
+        ) {
+            return ApplicationStatus.ENDED;
+        } else if (
+            _application.passedToValidationAt != 0 &&
+            _application.validatedAt == 0
+        ) {
+            return ApplicationStatus.UNDER_VALIDATION;
+        } else if (
+            _application.realisationRejectedAt != 0 &&
+            _application.passedToValidationAt == 0
+        ) {
+            return ApplicationStatus.NOT_ACCEPTED;
+        } else if (_application.realisationAcceptedAt != 0) {
+            return ApplicationStatus.ACCEPTED;
+        } else if (
+            _application.addedToReviewAt != 0 &&
+            _application.realisationAcceptedAt == 0 &&
+            _application.realisationRejectedAt == 0
+        ) {
+            return ApplicationStatus.UNDER_REVIEW;
+        } else if (
+            _application.nominationAcceptedAt != 0 &&
+            _application.addedToReviewAt == 0
+        ) {
+            return ApplicationStatus.IN_PROGRESS;
+        } else if (
+            _application.hunter != ZERO_ADDRESS && _application.nominatedAt != 0
+        ) {
+            return ApplicationStatus.NOMINATED;
         } else {
             return ApplicationStatus.OPEN_TO_NOMINATION;
         }
     }
 
     enum ApplicationStatus {
-        UNINITIALIZED,
         OPEN_TO_NOMINATION,
         NOMINATED,
         IN_PROGRESS,
@@ -109,7 +105,6 @@ contract BountyBay {
 
     struct Bounty {
         uint256 id;
-        // BountyStatus status;
         address creator;
         address validator;
         address token;
@@ -161,7 +156,6 @@ contract BountyBay {
         uint256 validatedAt;
         uint256 canceledAt;
         ApplicationCanceledBy canceledBy;
-        // ApplicationStatus status;
         uint256 id;
     }
 
