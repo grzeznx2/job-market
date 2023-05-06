@@ -104,68 +104,37 @@ contract BountyBay {
         } else return RealisationStatus.IN_PROGRESS;
     }
 
-    function getBountyApplicationStatus(
-        Application memory _application
-    ) internal pure returns (ApplicationStatus) {
-        if (_application.canceledAt != 0) {
-            if (_application.canceledBy == CanceledBy.HUNTER) {
-                if (_application.nominatedAt != 0) {
-                    if (_application.nominationAcceptedAt == 0) {
-                        return
-                            ApplicationStatus
-                                .CANCELED_AFTER_NOMINATION_BY_HUNTER;
-                    } else {
-                        return
-                            ApplicationStatus
-                                .CANCELED_AFTER_ACCEPTANCE_BY_HUNTER;
-                    }
-                } else {
-                    return ApplicationStatus.CANCELED;
-                }
-            } else {
-                if (_application.nominationAcceptedAt == 0) {
-                    return
-                        ApplicationStatus.CANCELED_AFTER_NOMINATION_BY_CREATOR;
-                } else {
-                    return
-                        ApplicationStatus.CANCELED_AFTER_ACCEPTANCE_BY_CREATOR;
-                }
-            }
-        } else if (
-            _application.validatedAt != 0 ||
-            _application.rejectionAcceptedAt != 0
-        ) {
-            return ApplicationStatus.ENDED;
-        } else if (
-            _application.passedToValidationAt != 0 &&
-            _application.validatedAt == 0
-        ) {
-            return ApplicationStatus.UNDER_VALIDATION;
-        } else if (
-            _application.realisationRejectedAt != 0 &&
-            _application.passedToValidationAt == 0
-        ) {
-            return ApplicationStatus.NOT_ACCEPTED;
-        } else if (_application.realisationAcceptedAt != 0) {
-            return ApplicationStatus.ACCEPTED;
-        } else if (
-            _application.addedToReviewAt != 0 &&
-            _application.realisationAcceptedAt == 0 &&
-            _application.realisationRejectedAt == 0
-        ) {
-            return ApplicationStatus.UNDER_REVIEW;
-        } else if (
-            _application.nominationAcceptedAt != 0 &&
-            _application.addedToReviewAt == 0
-        ) {
-            return ApplicationStatus.IN_PROGRESS;
-        } else if (
-            _application.hunter != ZERO_ADDRESS && _application.nominatedAt != 0
-        ) {
-            return ApplicationStatus.NOMINATED;
-        } else {
-            return ApplicationStatus.OPEN_TO_NOMINATION;
+    function getBountyStatus(
+        Bounty memory _bounty
+    ) internal pure returns (BountyStatus) {
+        Realisation memory realisation = _bounty.realisation;
+        RealisationStatus realisationStatus = getRealisationStatus(realisation);
+
+        if (realisationStatus == RealisationStatus.CANCELED_BY_CREATOR) {
+            return BountyStatus.REALISATION_CANCELED_BY_CREATOR;
+        } else if (realisationStatus == RealisationStatus.CANCELED_BY_HUNTER) {
+            return BountyStatus.REALISATION_CANCELED_BY_HUNTER;
+        } else if (realisationStatus == RealisationStatus.ENDED) {
+            return BountyStatus.REALISATION_ENDED;
+        } else if (realisationStatus == RealisationStatus.UNDER_VALIDATION) {
+            return BountyStatus.REALISATION_UNDER_VALIDATION;
+        } else if (realisationStatus == RealisationStatus.NOT_ACCEPTED) {
+            return BountyStatus.REALISATION_NOT_ACCEPTED;
+        } else if (realisationStatus == RealisationStatus.ACCEPTED) {
+            return BountyStatus.REALISATION_ACCEPTED;
+        } else if (realisationStatus == RealisationStatus.IN_PROGRESS) {
+            return BountyStatus.REALISATION_IN_PROGRESS;
         }
+
+        ApplicationStatus applicationStatus = getApplicationStatus(
+            _bounty.application
+        );
+
+        if (applicationStatus == ApplicationStatus.NOMINATED) {
+            return BountyStatus.APPLICATION_NOMINATED;
+        } else if (_bounty.canceledAt != 0) {
+            return BountyStatus.CANCELED_BEFORE_REALISATION;
+        } else return BountyStatus.OPEN_FOR_APPLICATIONS;
     }
 
     struct Bounty {
