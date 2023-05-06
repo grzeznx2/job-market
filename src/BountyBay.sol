@@ -25,7 +25,7 @@ contract BountyBay {
 
     function getBountyApplicationStatus(
         Application memory _application
-    ) internal returns (ApplicationStatus) {
+    ) internal pure returns (ApplicationStatus) {
         if (_application.hunter == ZERO_ADDRESS) {
             return ApplicationStatus.UNINITIALIZED;
         } else if (
@@ -108,9 +108,8 @@ contract BountyBay {
     }
 
     struct Bounty {
-        // Keep reference to Application instead of hunter, nominatedHunter, realisationProof (?)
         uint256 id;
-        BountyStatus status;
+        // BountyStatus status;
         address creator;
         address validator;
         address token;
@@ -228,7 +227,6 @@ contract BountyBay {
 
         Bounty memory bounty = Bounty(
             bountyId,
-            BountyStatus.OPEN,
             msg.sender,
             ZERO_ADDRESS,
             _token,
@@ -296,9 +294,15 @@ contract BountyBay {
     ) external {
         User memory user = userByAddress[msg.sender];
         Bounty storage bounty = bountyById[_bountyId];
-        require(bounty.status == BountyStatus.OPEN, "Invalid bounty status");
+        ApplicationStatus applicationStatus = getBountyApplicationStatus(
+            bounty.application
+        );
+        require(
+            applicationStatus == ApplicationStatus.OPEN_TO_NOMINATION ||
+                applicationStatus == ApplicationStatus.NOMINATED,
+            "Invalid application status"
+        );
         require(bounty.creator != msg.sender, "Cannot apply for own bounty");
-        require(bounty.status == BountyStatus.OPEN, "Bounty not open");
         require(
             user.reputation >= bounty.minHunterReputation,
             "Reputation too low"
@@ -340,9 +344,7 @@ contract BountyBay {
         applicationId++;
     }
 
-    function nominateApplication(
-        uint256 _applicationId // address _nominatedAddress
-    ) external {
+    function nominateApplication(uint256 _applicationId) external {
         require(_applicationId != 0, "Invalid application id");
         Application storage application = applicationById[_applicationId];
         Bounty storage bounty = bountyById[application.bountyId];
@@ -351,7 +353,6 @@ contract BountyBay {
                 ApplicationStatus.OPEN_TO_NOMINATION,
             "Invalid application status"
         );
-        require(bounty.status == BountyStatus.OPEN, "Bounty not open");
         require(bounty.creator == msg.sender, "Not bounty creator");
         require(
             application.validUntil >= block.timestamp,
@@ -363,32 +364,21 @@ contract BountyBay {
         bounty.nominationAcceptanceDeadline =
             block.timestamp +
             bounty.nominationAcceptanceTime;
-        // Status probably redundant = duplication with ApplicationStatus
-        bounty.status = BountyStatus.HUNTER_NOMINATED;
     }
 
     function acceptNomination(uint256 _applicationId) external {
         Application storage application = applicationById[_applicationId];
-        require(application.hunter == msg.sender, "Not bounty hunter");
+        require(application.hunter == msg.sender, "Not nominated hunter");
         Bounty storage bounty = bountyById[application.bountyId];
         require(
             getBountyApplicationStatus(bounty.application) ==
                 ApplicationStatus.NOMINATED,
             "Invalid application status"
         );
-        // Status probably redundant = duplication with ApplicationStatus
-        require(
-            bounty.status == BountyStatus.HUNTER_NOMINATED,
-            "Incorrect bounty status"
-        );
-        // require(bounty.nominatedHunter == msg.sender, "Must be nominated");
         require(
             bounty.nominationAcceptanceDeadline >= block.timestamp,
             "Acceptance deadline passed"
         );
-        // Application storage application = applicationByBountyIdAndAddress[
-        //     msg.sender
-        // ][_bountyId];
         address token = bounty.token;
         uint256 totalAmount = bounty.validatorReward + bounty.minHunterDeposit;
         if (claimableTokenBalanceByUser[msg.sender][token] >= totalAmount) {
@@ -405,7 +395,6 @@ contract BountyBay {
         application.nominationAcceptedAt = block.timestamp;
         bounty.hunterReward = application.proposedReward;
         bounty.deadline = application.proposedDeadline;
-        bounty.status = BountyStatus.IN_PROGRESS;
     }
 
     function cancelApplication(uint256 _applicationId) external {
@@ -419,12 +408,10 @@ contract BountyBay {
         ) {
             Bounty storage bounty = bountyById[application.bountyId];
             bounty.nominationAcceptanceDeadline = 0;
-            bounty.status = BountyStatus.OPEN;
             userByAddress[msg.sender].canceledAfterNomination += 1;
         } else if (status == ApplicationStatus.ACCEPTED) {
             Bounty storage bounty = bountyById[application.bountyId];
             bounty.nominationAcceptanceDeadline = 0;
-            bounty.status = BountyStatus.OPEN;
             userByAddress[msg.sender].canceledAfterAcceptance += 1;
 
             uint256 daysSinceAcceptance = getDaysFromNow(
@@ -470,17 +457,10 @@ contract BountyBay {
             "Invalid application status"
         );
         Bounty storage bounty = bountyById[application.bountyId];
-        // Status probably redundant
-        require(
-            bounty.status == BountyStatus.HUNTER_NOMINATED,
-            "Bounty not open"
-        );
         require(bounty.creator == msg.sender, "Not bounty creator");
         application.canceledAt = block.timestamp;
         application.canceledBy = ApplicationCanceledBy.CREATOR;
         bounty.nominationAcceptanceDeadline = 0;
-        // Status probrably redundant
-        bounty.status = BountyStatus.OPEN;
     }
 
     function addApplicationToReview(
@@ -495,17 +475,10 @@ contract BountyBay {
         );
         require(application.hunter == msg.sender, "Not bounty hunter");
         Bounty storage bounty = bountyById[application.bountyId];
-        // Check probrably redundant after status deletion
-        require(
-            bounty.status == BountyStatus.IN_PROGRESS,
-            "Bounty not in progress"
-        );
         // Check probrably redundant - Application may be added after deadline
         // require(bounty.deadline >= block.timestamp, "Deadline passed");
         application.addedToReviewAt = block.timestamp;
         bounty.realisationProof = _realisationProof;
-        // Status probrably redundant
-        bounty.status = BountyStatus.REVIEW;
     }
 
     function getBountyApplications(
@@ -573,11 +546,6 @@ contract BountyBay {
         Bounty storage bounty = bountyById[application.bountyId];
 
         require(bounty.creator == msg.sender, "Not bounty creator");
-        // status probably redundant
-        require(
-            bounty.status == BountyStatus.REVIEW,
-            "Bounty not under review"
-        );
 
         address hunter = application.hunter;
         address token = bounty.token;
@@ -593,8 +561,6 @@ contract BountyBay {
         claimableTokenBalanceByUser[msg.sender][token] += validatorReward;
         tokenBalanceByUser[msg.sender][token] -= (validatorReward +
             hunterAmount);
-        // status probably redundant
-        bounty.status = BountyStatus.ACCEPTED;
         application.realisationAcceptedAt = block.timestamp;
     }
 
@@ -607,14 +573,6 @@ contract BountyBay {
                 ApplicationStatus.UNDER_REVIEW,
             "Invalid application status"
         );
-        // Status probrably redundant
-        require(
-            bounty.status == BountyStatus.REVIEW,
-            "Bounty not under review"
-        );
-
-        // Status probrably redundant
-        bounty.status = BountyStatus.NOT_ACCEPTED;
         bounty.application.realisationRejectedAt = block.timestamp;
     }
 
@@ -629,11 +587,6 @@ contract BountyBay {
             "Invalid application status"
         );
         Bounty storage bounty = bountyById[application.bountyId];
-
-        require(
-            bounty.status == BountyStatus.NOT_ACCEPTED,
-            "Bounty not rejected"
-        );
 
         address creator = bounty.creator;
         address token = bounty.token;
@@ -651,7 +604,6 @@ contract BountyBay {
         tokenBalanceByUser[msg.sender][token] -= (validatorReward +
             minHunterDeposit);
 
-        bounty.status = BountyStatus.ENDED;
         application.rejectionAcceptedAt = block.timestamp;
     }
 
