@@ -140,6 +140,7 @@ contract BountyBay {
             return BountyStatus.APPLICATION_NOMINATED;
         } else if (_bounty.canceledAt != 0) {
             return BountyStatus.CANCELED_BEFORE_REALISATION;
+            // TODO: Should also check for deadline or other timestamps here
         } else return BountyStatus.OPEN_FOR_APPLICATIONS;
     }
 
@@ -320,7 +321,6 @@ contract BountyBay {
                 0,
                 0,
                 0,
-                0,
                 CanceledBy.NONE,
                 0
             ),
@@ -370,13 +370,11 @@ contract BountyBay {
     ) external {
         User memory user = userByAddress[msg.sender];
         Bounty storage bounty = bountyById[_bountyId];
-        ApplicationStatus applicationStatus = getBountyApplicationStatus(
-            bounty.application
-        );
+        BountyStatus bountyStatus = getBountyStatus(bounty);
         require(
-            applicationStatus == ApplicationStatus.OPEN_TO_NOMINATION ||
-                applicationStatus == ApplicationStatus.NOMINATED,
-            "Invalid application status"
+            bountyStatus == BountyStatus.OPEN_FOR_APPLICATIONS ||
+                bountyStatus.APPLICATION_NOMINATED,
+            "Ivalid bounty status"
         );
         require(bounty.creator != msg.sender, "Cannot apply for own bounty");
         require(
@@ -388,7 +386,7 @@ contract BountyBay {
             "Deadline must be in the future"
         );
         require(_proposedReward > 0, "Proposed reward must be > 0");
-        require(_validUntil >= block.timestamp, "Too late");
+        require(_validUntil >= block.timestamp, "Must be in the future");
 
         require(
             applicationIdByBountyIdAndAddress[msg.sender][_bountyId] == 0,
@@ -401,12 +399,6 @@ contract BountyBay {
             _proposedDeadline,
             _proposedReward,
             _validUntil,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
             0,
             0,
             0,
