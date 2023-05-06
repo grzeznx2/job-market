@@ -341,21 +341,7 @@ contract BountyBay {
             )
         );
 
-        uint256 totalAmount = bounty.validatorReward + bounty.hunterReward;
-        /*
-        If user has funds in the contract, take it from here, otherwise create transfer
-         */
-        if (claimableTokenBalanceByUser[msg.sender][_token] >= totalAmount) {
-            claimableTokenBalanceByUser[msg.sender][_token] -= totalAmount;
-        } else {
-            bool success = IERC20(_token).transferFrom(
-                msg.sender,
-                address(this),
-                totalAmount
-            );
-            require(success, "Error transfering funds");
-        }
-        tokenBalanceByUser[msg.sender][_token] += totalAmount;
+        _lockTokens(_token, _validatorReward + _hunterReward);
         bountyById[bountyId] = bounty;
         bountyIdsByCreator[msg.sender].push(bountyId);
         bountyIds.push(bountyId);
@@ -433,23 +419,10 @@ contract BountyBay {
         application.nominatedAt = block.timestamp;
         bounty.application = application;
         if (application.proposedReward > bounty.hunterReward) {
-            uint256 missingReward = application.proposedReward -
-                bounty.hunterReward;
-            address token = bounty.token;
-
-            if (
-                claimableTokenBalanceByUser[msg.sender][token] >= missingReward
-            ) {
-                claimableTokenBalanceByUser[msg.sender][token] -= missingReward;
-            } else {
-                bool success = IERC20(token).transferFrom(
-                    msg.sender,
-                    address(this),
-                    missingReward
-                );
-                require(success, "Error transfering funds");
-            }
-            tokenBalanceByUser[msg.sender][token] += missingReward;
+            _lockTokens(
+                bounty.token,
+                application.proposedReward - bounty.hunterReward
+            );
         }
         // TODO: This should probably go to Application
         bounty.nominationAcceptanceDeadline =
@@ -757,5 +730,19 @@ contract BountyBay {
         uint256 b
     ) private pure returns (uint256) {
         return a >= b ? a - b : b - a;
+    }
+
+    function _lockTokens(address _token, uint256 _amount) private {
+        if (claimableTokenBalanceByUser[msg.sender][_token] >= _amount) {
+            claimableTokenBalanceByUser[msg.sender][_token] -= _amount;
+        } else {
+            bool success = IERC20(_token).transferFrom(
+                msg.sender,
+                address(this),
+                _amount
+            );
+            require(success, "Error transfering funds");
+        }
+        tokenBalanceByUser[msg.sender][_token] += _amount;
     }
 }
