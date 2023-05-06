@@ -158,6 +158,7 @@ contract BountyBay {
         uint8 hunterDepositDecreasePerDayAfterAcceptance;
         uint8 hunterRewardDecreasePerDayAfterDeadline;
         Application application;
+        Realisation realisation;
     }
 
     struct User {
@@ -182,12 +183,6 @@ contract BountyBay {
         uint256 validUntil;
         uint256 nominatedAt;
         uint256 nominationAcceptedAt;
-        uint256 addedToReviewAt;
-        uint256 realisationAcceptedAt;
-        uint256 realisationRejectedAt;
-        uint256 rejectionAcceptedAt;
-        uint256 passedToValidationAt;
-        uint256 validatedAt;
         uint256 canceledAt;
         CanceledBy canceledBy;
         uint256 id;
@@ -215,6 +210,7 @@ contract BountyBay {
     uint256 private applicationId = 1;
     mapping(uint256 => Bounty) private bountyById;
     mapping(uint256 => Application) private applicationById;
+    mapping(uint256 => Realisation) private realisationById;
     mapping(uint256 => address) private creatorByBountyId;
     mapping(uint256 => address) private hunterByBountyId;
     mapping(uint256 => address) private validatorByBountyId;
