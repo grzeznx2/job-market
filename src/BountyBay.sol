@@ -433,29 +433,24 @@ contract BountyBay {
     function acceptNomination(uint256 _applicationId) external {
         Application storage application = applicationById[_applicationId];
         require(application.hunter == msg.sender, "Not nominated hunter");
-        Bounty storage bounty = bountyById[application.bountyId];
         require(
-            getBountyApplicationStatus(bounty.application) ==
-                ApplicationStatus.NOMINATED,
+            getApplicationStatus(application) == ApplicationStatus.NOMINATED,
             "Invalid application status"
         );
+        Bounty storage bounty = bountyById[application.bountyId];
         require(
             bounty.nominationAcceptanceDeadline >= block.timestamp,
             "Acceptance deadline passed"
         );
         address token = bounty.token;
-        uint256 totalAmount = bounty.validatorReward + bounty.minHunterDeposit;
-        if (claimableTokenBalanceByUser[msg.sender][token] >= totalAmount) {
-            claimableTokenBalanceByUser[msg.sender][token] -= totalAmount;
-        } else {
-            bool success = IERC20(token).transferFrom(
-                msg.sender,
-                address(this),
-                totalAmount
-            );
-            require(success, "Error transfering funds");
+        _lockTokens(token, bounty.validatorReward + bounty.minHunterDeposit);
+        if (application.proposedReward < bounty.hunterReward) {
+            uint256 excessiveAmount = application.proposedReward -
+                bounty.hunterReward;
+            address creator = bounty.creator;
+            claimableTokenBalanceByUser[creator][token] += excessiveAmount;
+            tokenBalanceByUser[creator][token] -= excessiveAmount;
         }
-        tokenBalanceByUser[msg.sender][token] += totalAmount;
         application.nominationAcceptedAt = block.timestamp;
         bounty.hunterReward = application.proposedReward;
         bounty.deadline = application.proposedDeadline;
