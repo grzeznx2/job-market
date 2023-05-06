@@ -621,23 +621,22 @@ contract BountyBay {
             getRealisationStatus(realisation) == RealisationStatus.UNDER_REVIEW,
             "Invalid realisation status"
         );
-        Bounty storage bounty = bountyById[realisation.bountyId];
 
-        require(bounty.creator == msg.sender, "Not bounty creator");
+        require(
+            bountyById[realisation.bountyId].creator == msg.sender,
+            "Not bounty creator"
+        );
         realisation.realisationRejectedAt = block.timestamp;
     }
 
-    function acceptApplicationCompletionRejection(
-        uint256 _applicationId
-    ) external {
-        Application storage application = applicationById[_applicationId];
-        require(application.hunter == msg.sender, "Not bounty hunter");
+    function acceptRealisationRejection(uint256 _realisationId) external {
+        Realisation storage realisation = realisationById[_realisationId];
+        require(realisation.hunter == msg.sender, "Not bounty hunter");
         require(
-            getBountyApplicationStatus(application) ==
-                ApplicationStatus.NOT_ACCEPTED,
-            "Invalid application status"
+            getRealisationStatus(realisation) == RealisationStatus.NOT_ACCEPTED,
+            "Invalid realisation status"
         );
-        Bounty storage bounty = bountyById[application.bountyId];
+        Bounty storage bounty = bountyById[realisation.bountyId];
 
         address creator = bounty.creator;
         address token = bounty.token;
@@ -655,7 +654,7 @@ contract BountyBay {
         tokenBalanceByUser[msg.sender][token] -= (validatorReward +
             minHunterDeposit);
 
-        application.rejectionAcceptedAt = block.timestamp;
+        realisation.rejectionAcceptedAt = block.timestamp;
     }
 
     function passApplicationToValidation(uint256 _applicationId) external {
