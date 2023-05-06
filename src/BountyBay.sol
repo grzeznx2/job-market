@@ -27,7 +27,10 @@ contract BountyBay {
         CANCELED_AFTER_NOMINATION_BY_HUNTER,
         CANCELED_AFTER_NOMINATION_BY_CREATOR,
         CANCELED_AFTER_ACCEPTANCE_BY_HUNTER,
-        CANCELED_AFTER_ACCEPTANCE_BY_CREATOR
+        CANCELED_AFTER_ACCEPTANCE_BY_CREATOR,
+        ACCEPTED,
+        NOT_ACCEPTED,
+        ENDED
     }
 
     struct Bounty {
@@ -273,6 +276,7 @@ contract BountyBay {
     function acceptNomination(uint256 _applicationId) external {
         Application storage application = applicationById[_applicationId];
         require(application.status == ApplicationStatus.NOMINATED);
+        require(application.hunter == msg.sender, "Not bounty hunter");
         Bounty storage bounty = bountyById[application.bountyId];
         // Status probably redundant = duplication with ApplicationStatus
         require(
@@ -304,13 +308,13 @@ contract BountyBay {
         application.acceptedAt = block.timestamp;
         bounty.hunterReward = application.proposedReward;
         bounty.deadline = application.proposedDeadline;
-        bounty.hunter = msg.sender;
         bounty.status = BountyStatus.IN_PROGRESS;
     }
 
     function cancelApplication(uint256 _applicationId) external {
         Application storage application = applicationById[_applicationId];
         ApplicationStatus status = application.status;
+        require(application.hunter == msg.sender, "Not bounty hunter");
 
         if (status == ApplicationStatus.PENDING) {
             application.status = ApplicationStatus.CANCELED;
@@ -387,6 +391,7 @@ contract BountyBay {
     ) external {
         Application storage application = applicationById[_applicationId];
         require(application.status == ApplicationStatus.IN_PROGRESS);
+        require(application.hunter == msg.sender, "Not bounty hunter");
         Bounty storage bounty = bountyById[application.bountyId];
         // Check probrably redundant after status deletion
         require(
@@ -405,7 +410,7 @@ contract BountyBay {
     function getBountyApplications(
         uint256 _bountyId
     ) external view returns (Application[] memory) {
-        address[] memory applicationIds = bountyById[_bountyId].applicationIds;
+        uint256[] memory applicationIds = bountyById[_bountyId].applicationIds;
         uint256 applicationsCount = applicationIds.length;
         Application[] memory applications = new Application[](
             applicationsCount
@@ -457,48 +462,67 @@ contract BountyBay {
         require(success, "Error transferring funds");
     }
 
-    function acceptBountyCompletion(uint256 _bountyId) external {
-        Bounty storage bounty = bountyById[_bountyId];
+    function acceptApplicationCompletion(uint256 _applicationId) external {
+        Application storage application = applicationById[_applicationId];
+        require(application.status == ApplicationStatus.UNDER_REVIEW);
+        Bounty storage bounty = bountyById[application.bountyId];
 
         require(bounty.creator == msg.sender, "Not bounty creator");
+        // status probably redundant
         require(
             bounty.status == BountyStatus.REVIEW,
             "Bounty not under review"
         );
 
-        address hunter = bounty.hunter;
+        address hunter = application.hunter;
         address token = bounty.token;
         uint256 validatorReward = bounty.validatorReward;
         uint256 hunterReward = bounty.hunterReward;
         uint256 hunterDeposits = bounty.minHunterDeposit + validatorReward;
         uint256 hunterAmount = hunterReward + hunterDeposits;
 
+        // TODO: calc correct amounts based on duration after deadline
         // TODO: Failed => Find why?
         claimableTokenBalanceByUser[hunter][token] += hunterAmount;
         tokenBalanceByUser[hunter][token] -= hunterDeposits;
         claimableTokenBalanceByUser[msg.sender][token] += validatorReward;
         tokenBalanceByUser[msg.sender][token] -= (validatorReward +
             hunterAmount);
-
+        // status probably redundant
         bounty.status = BountyStatus.ACCEPTED;
+        application.status = ApplicationStatus.ACCEPTED;
     }
 
     function rejectBountyCompletion(uint256 _bountyId) external {
+        // Check which approach is more gase efficient => here we get bounty by id instead of getting application first
         Bounty storage bounty = bountyById[_bountyId];
-
         require(bounty.creator == msg.sender, "Not bounty creator");
+        require(
+            bounty.application.status == ApplicationStatus.UNDER_REVIEW,
+            "Invalid application status"
+        );
+        // Status probrably redundant
         require(
             bounty.status == BountyStatus.REVIEW,
             "Bounty not under review"
         );
 
+        // Status probrably redundant
         bounty.status = BountyStatus.NOT_ACCEPTED;
+        bounty.application.status = ApplicationStatus.NOT_ACCEPTED;
     }
 
-    function acceptBountyRejection(uint256 _bountyId) external {
-        Bounty storage bounty = bountyById[_bountyId];
+    function acceptApplicationCompletionRejection(
+        uint256 _applicationId
+    ) external {
+        Application storage application = applicationById[_applicationId];
+        require(application.hunter == msg.sender, "Not bounty hunter");
+        require(
+            application.status == ApplicationStatus.NOT_ACCEPTED,
+            "Invalid application status"
+        );
+        Bounty storage bounty = bountyById[application.bountyId];
 
-        require(bounty.hunter == msg.sender, "Not bounty hunter");
         require(
             bounty.status == BountyStatus.NOT_ACCEPTED,
             "Bounty not rejected"
@@ -513,6 +537,7 @@ contract BountyBay {
             hunterReward +
             minHunterDeposit;
 
+        // CALC based on time after deadline
         claimableTokenBalanceByUser[creator][token] += creatorAmount;
         tokenBalanceByUser[creator][token] -= (validatorReward + hunterReward);
         claimableTokenBalanceByUser[msg.sender][token] += validatorReward;
@@ -520,12 +545,14 @@ contract BountyBay {
             minHunterDeposit);
 
         bounty.status = BountyStatus.ENDED;
+        application.status = ApplicationStatus.ENDED;
     }
 
     function passBountyToValidation(uint256 _bountyId) external {
+        // TODO: bounty or application?
         Bounty storage bounty = bountyById[_bountyId];
 
-        require(bounty.hunter == msg.sender, "Not bounty hunter");
+        require(bounty.application.hunter == msg.sender, "Not bounty hunter");
         require(
             bounty.status == BountyStatus.NOT_ACCEPTED,
             "Bounty not rejected"
@@ -535,7 +562,7 @@ contract BountyBay {
     }
 
     function updateApplication(
-        uint256 _bountyId,
+        uint256 _applicationId,
         uint256 _proposedDeadline,
         uint256 _proposedReward,
         uint256 _validUntil
@@ -546,9 +573,8 @@ contract BountyBay {
         );
         // TODO: also check for bounty status?
 
-        Application storage application = applicationByBountyIdAndAddress[
-            msg.sender
-        ][_bountyId];
+        Application storage application = applicationById[_applicationId];
+        require(application.hunter == msg.sender, "Not bounty hunter");
         require(
             application.status == ApplicationStatus.PENDING,
             "Invalid status"
