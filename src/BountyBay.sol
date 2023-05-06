@@ -17,6 +17,15 @@ contract BountyBay {
         ENDED
     }
 
+    enum ApplicationStatus {
+        OPEN_TO_NOMINATION,
+        NOMINATED,
+        ACCEPTED,
+        CANCELED_BEFORE_NOMINATION,
+        CANCELED_AFTER_NOMINATION_BY_HUNTER,
+        CANCELED_AFTER_NOMINATION_BY_CREATOR
+    }
+
     enum ApplicationCanceledBy {
         NONE,
         HUNTER,
@@ -85,22 +94,6 @@ contract BountyBay {
         } else {
             return ApplicationStatus.OPEN_TO_NOMINATION;
         }
-    }
-
-    enum ApplicationStatus {
-        OPEN_TO_NOMINATION,
-        NOMINATED,
-        IN_PROGRESS,
-        UNDER_REVIEW,
-        ACCEPTED,
-        NOT_ACCEPTED,
-        UNDER_VALIDATION,
-        ENDED,
-        CANCELED,
-        CANCELED_AFTER_NOMINATION_BY_HUNTER,
-        CANCELED_AFTER_NOMINATION_BY_CREATOR,
-        CANCELED_AFTER_ACCEPTANCE_BY_HUNTER,
-        CANCELED_AFTER_ACCEPTANCE_BY_CREATOR
     }
 
     struct Bounty {
@@ -622,7 +615,6 @@ contract BountyBay {
             _proposedReward != 0 || _proposedDeadline != 0 || _validUntil != 0,
             "Must edit at least one field"
         );
-        // TODO: also check for bounty status?
 
         Application storage application = applicationById[_applicationId];
         require(application.hunter == msg.sender, "Not bounty hunter");
