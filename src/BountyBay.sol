@@ -160,7 +160,7 @@ contract BountyBay {
         uint256 minHunterReputation;
         uint256 minHunterDeposit;
         uint256[] applicationIds;
-        uint256 nominationAcceptanceDeadline;
+        // uint256 nominationAcceptanceDeadline;
         string realisationProof;
         uint8 hunterDepositDecreasePerDayAfterAcceptance;
         uint8 hunterRewardDecreasePerDayAfterDeadline;
@@ -191,6 +191,7 @@ contract BountyBay {
         uint256 nominatedAt;
         uint256 nominationAcceptedAt;
         uint256 canceledAt;
+        uint256 nominationAcceptanceDeadline;
         CanceledBy canceledBy;
         uint256 id;
     }
@@ -308,13 +309,13 @@ contract BountyBay {
             _minHunterReputation,
             _minHunterDeposit,
             new uint256[](0),
-            0,
             "",
             _refundDecreasePerDayAfterAcceptance,
             _rewardDecreasePerDayAfterDeadline,
             Application(
                 ZERO_ADDRESS,
                 bountyId,
+                0,
                 0,
                 0,
                 0,
@@ -424,8 +425,8 @@ contract BountyBay {
                 application.proposedReward - bounty.hunterReward
             );
         }
-        // TODO: This should probably go to Application
-        bounty.nominationAcceptanceDeadline =
+
+        application.nominationAcceptanceDeadline =
             block.timestamp +
             bounty.nominationAcceptanceTime;
     }
@@ -439,7 +440,7 @@ contract BountyBay {
         );
         Bounty storage bounty = bountyById[application.bountyId];
         require(
-            bounty.nominationAcceptanceDeadline >= block.timestamp,
+            application.nominationAcceptanceDeadline >= block.timestamp,
             "Acceptance deadline passed"
         );
         address token = bounty.token;
@@ -459,18 +460,19 @@ contract BountyBay {
     function cancelApplication(uint256 _applicationId) external {
         Application storage application = applicationById[_applicationId];
         require(application.hunter == msg.sender, "Not bounty hunter");
-        ApplicationStatus status = getBountyApplicationStatus(application);
+        ApplicationStatus status = getApplicationStatus(application);
+        require(
+            status == ApplicationStatus.ACCEPTED ||
+                status == ApplicationStatus.NOMINATED ||
+                status == ApplicationStatus.OPEN_TO_NOMINATION,
+            "Invalid application status"
+        );
         application.canceledAt = block.timestamp;
         application.canceledBy = CanceledBy.HUNTER;
-        if (status == ApplicationStatus.OPEN_TO_NOMINATION) {} else if (
-            status == ApplicationStatus.NOMINATED
-        ) {
-            Bounty storage bounty = bountyById[application.bountyId];
-            bounty.nominationAcceptanceDeadline = 0;
+        if (status == ApplicationStatus.NOMINATED) {
             userByAddress[msg.sender].canceledAfterNomination += 1;
         } else if (status == ApplicationStatus.ACCEPTED) {
             Bounty storage bounty = bountyById[application.bountyId];
-            bounty.nominationAcceptanceDeadline = 0;
             userByAddress[msg.sender].canceledAfterAcceptance += 1;
 
             uint256 daysSinceAcceptance = getDaysFromNow(
@@ -503,8 +505,6 @@ contract BountyBay {
                 depositReturnedToHunter);
             tokenBalanceByUser[msg.sender][token] -= (validatorReward +
                 depositLostByHunter);
-        } else {
-            revert("Invalid application status");
         }
     }
 
