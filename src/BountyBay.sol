@@ -417,7 +417,11 @@ contract BountyBay {
         Application storage application = applicationById[_applicationId];
         Bounty storage bounty = bountyById[application.bountyId];
         require(
-            getBountyApplicationStatus(bounty.application) ==
+            getBountyStatus(bounty) == BountyStatus.OPEN_FOR_APPLICATIONS,
+            "Invalid bounty status"
+        );
+        require(
+            getApplicationStatus(application) ==
                 ApplicationStatus.OPEN_TO_NOMINATION,
             "Invalid application status"
         );
@@ -429,6 +433,7 @@ contract BountyBay {
         // TODO : Adjust creator balances regarding application proposed reward
         application.nominatedAt = block.timestamp;
         bounty.application = application;
+        // TODO: This should probably go to Application
         bounty.nominationAcceptanceDeadline =
             block.timestamp +
             bounty.nominationAcceptanceTime;
