@@ -13,7 +13,6 @@ contract BountyBay {
 
     enum BountyStatus {
         OPEN_FOR_APPLICATIONS,
-        APPLICATION_NOMINATED,
         REALISATION_IN_PROGRESS,
         REALISATION_UNDER_REVIEW,
         REALISATION_ACCEPTED,
@@ -26,12 +25,9 @@ contract BountyBay {
     }
 
     enum ApplicationStatus {
-        OPEN_TO_NOMINATION,
-        NOMINATED,
+        OPEN,
         ACCEPTED,
-        CANCELED_BEFORE_NOMINATION,
-        CANCELED_AFTER_NOMINATION_BY_HUNTER,
-        CANCELED_AFTER_NOMINATION_BY_CREATOR,
+        CANCELED,
         EXPIRED
     }
 
@@ -56,25 +52,11 @@ contract BountyBay {
         Application memory _application
     ) internal view returns (ApplicationStatus) {
         if (_application.canceledAt != 0) {
-            if (_application.nominatedAt != 0) {
-                if (_application.canceledBy == CanceledBy.HUNTER) {
-                    return
-                        ApplicationStatus.CANCELED_AFTER_NOMINATION_BY_HUNTER;
-                } else {
-                    return
-                        ApplicationStatus.CANCELED_AFTER_NOMINATION_BY_CREATOR;
-                }
-            } else {
-                return ApplicationStatus.CANCELED_BEFORE_NOMINATION;
-            }
-        } else if (_application.nominationAcceptedAt != 0) {
-            return ApplicationStatus.ACCEPTED;
-        } else if (_application.nominatedAt != 0) {
-            return ApplicationStatus.NOMINATED;
-        } else if (_application.validUntil < block.timestamp) {
+            return ApplicationStatus.CANCELED;
+        else if (_application.validUntil < block.timestamp) {
             return ApplicationStatus.EXPIRED;
         } else {
-            return ApplicationStatus.OPEN_TO_NOMINATION;
+            return ApplicationStatus.OPEN;
         }
     }
 
@@ -116,8 +98,9 @@ contract BountyBay {
     function getBountyStatus(
         Bounty memory _bounty
     ) internal view returns (BountyStatus) {
-        Realisation memory realisation = _bounty.realisation;
-        RealisationStatus realisationStatus = getRealisationStatus(realisation);
+        RealisationStatus realisationStatus = getRealisationStatus(
+            _bounty.realisation
+        );
 
         if (realisationStatus == RealisationStatus.CANCELED_BY_CREATOR) {
             return BountyStatus.REALISATION_CANCELED_BY_CREATOR;
@@ -135,13 +118,7 @@ contract BountyBay {
             return BountyStatus.REALISATION_IN_PROGRESS;
         }
 
-        ApplicationStatus applicationStatus = getApplicationStatus(
-            _bounty.application
-        );
-
-        if (applicationStatus == ApplicationStatus.NOMINATED) {
-            return BountyStatus.APPLICATION_NOMINATED;
-        } else if (_bounty.canceledAt != 0) {
+        if (_bounty.canceledAt != 0) {
             return BountyStatus.CANCELED_BEFORE_REALISATION;
             // TODO: Should also check for deadline or other timestamps here
         } else return BountyStatus.OPEN_FOR_APPLICATIONS;
@@ -156,7 +133,6 @@ contract BountyBay {
         string description;
         string acceptanceCriteria;
         uint256 deadline;
-        uint256 nominationAcceptanceTime;
         uint256 reviewPeriodTime;
         uint256 hunterReward;
         uint256 validatorReward;
@@ -181,7 +157,6 @@ contract BountyBay {
         uint256[] bountiesValidated;
         uint256[] bountiesAssignedToDo;
         uint256[] bountiesAssignedToValidation;
-        uint256 canceledAfterNomination;
         uint256 canceledAfterAcceptance;
     }
 
@@ -191,10 +166,8 @@ contract BountyBay {
         uint256 proposedDeadline;
         uint256 proposedReward;
         uint256 validUntil;
-        uint256 nominatedAt;
-        uint256 nominationAcceptedAt;
+        uint256 acceptedAt;
         uint256 canceledAt;
-        uint256 nominationAcceptanceDeadline;
         CanceledBy canceledBy;
         uint256 id;
     }
@@ -248,7 +221,6 @@ contract BountyBay {
         string memory _description,
         string memory _acceptanceCriteria,
         uint256 _deadline,
-        uint256 _nominationAcceptanceTime,
         uint256 _reviewPeriodTime,
         uint256 _hunterReward,
         uint256 _validatorReward,
@@ -279,10 +251,6 @@ contract BountyBay {
             acceptanceCriteriaLength <= minBountyAcceptanceCriteriaLength,
             "AcceptanceCriteria too long"
         );
-        require(
-            _nominationAcceptanceTime > 0,
-            "Nomination acceptance time must be > 0"
-        );
         require(_reviewPeriodTime > 0, "Review Period Time must be >= 0");
         require(_hunterReward >= 0, "Hunter reward must be > 0");
         require(_validatorReward > 0, "Validator reward must be > 0");
@@ -305,7 +273,6 @@ contract BountyBay {
             _description,
             _acceptanceCriteria,
             _deadline,
-            _nominationAcceptanceTime,
             _reviewPeriodTime,
             _hunterReward,
             _validatorReward,
@@ -318,8 +285,6 @@ contract BountyBay {
             Application(
                 ZERO_ADDRESS,
                 bountyId,
-                0,
-                0,
                 0,
                 0,
                 0,
@@ -356,14 +321,14 @@ contract BountyBay {
         uint256 _bountyId,
         uint256 _proposedDeadline,
         uint256 _proposedReward,
-        uint256 _validUntil
+        uint256 _validUntil,
+        bool _addMissingAmount
     ) external {
         User memory user = userByAddress[msg.sender];
         Bounty storage bounty = bountyById[_bountyId];
         BountyStatus bountyStatus = getBountyStatus(bounty);
         require(
-            bountyStatus == BountyStatus.OPEN_FOR_APPLICATIONS ||
-                bountyStatus == BountyStatus.APPLICATION_NOMINATED,
+            bountyStatus == BountyStatus.OPEN_FOR_APPLICATIONS,
             "Ivalid bounty status"
         );
         require(bounty.creator != msg.sender, "Cannot apply for own bounty");
@@ -383,14 +348,27 @@ contract BountyBay {
             "Already applied"
         );
 
+        if (_addMissingAmount) {
+            address token = bounty.token;
+            uint256 hunterClaimableBalance = claimableTokenBalanceByUser[
+                msg.sender
+            ][token];
+            if (bounty.minHunterDeposit > hunterClaimableBalance) {
+                bool success = IERC20(token).transferFrom(
+                    msg.sender,
+                    address(this),
+                    bounty.minHunterDeposit - hunterClaimableBalance
+                );
+                require(success, "Error transfering funds");
+            }
+        }
+
         applicationById[applicationId] = Application(
             msg.sender,
             _bountyId,
             _proposedDeadline,
             _proposedReward,
             _validUntil,
-            0,
-            0,
             0,
             0,
             CanceledBy.NONE,
@@ -563,7 +541,7 @@ contract BountyBay {
         return bounties;
     }
 
-    function whitelistToken(address _token) external onlyAdmin {
+    function whitelistToken(addres _token) external onlyAdmin {
         isWhitelistedToken[_token] = true;
     }
 
