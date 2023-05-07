@@ -97,7 +97,7 @@ contract BountyBay {
 
     function getBountyStatus(
         Bounty memory _bounty
-    ) internal pure returns (BountyStatus) {
+    ) internal view returns (BountyStatus) {
         RealisationStatus realisationStatus = getRealisationStatus(
             _bounty.realisation
         );
@@ -157,7 +157,7 @@ contract BountyBay {
         uint256[] bountiesValidated;
         uint256[] bountiesAssignedToDo;
         uint256[] bountiesAssignedToValidation;
-        uint256 canceledRealisationsCount;
+        uint256 canceledAfterAcceptance;
     }
 
     struct Application {
@@ -176,7 +176,6 @@ contract BountyBay {
         address hunter;
         uint256 bountyId;
         uint256 id;
-        uint256 startedAt;
         uint256 addedToReviewAt;
         uint256 realisationAcceptedAt;
         uint256 realisationRejectedAt;
@@ -306,7 +305,6 @@ contract BountyBay {
                 0,
                 0,
                 0,
-                0,
                 CanceledBy.NONE,
                 ""
             )
@@ -383,100 +381,123 @@ contract BountyBay {
         applicationId++;
     }
 
-    function acceptApplication(uint256 _applicationId) external {
+    function nominateApplication(uint256 _applicationId) external {
+        require(_applicationId != 0, "Invalid application id");
         Application storage application = applicationById[_applicationId];
-        require(
-            getApplicationStatus(application) == ApplicationStatus.OPEN,
-            "Invalid application status"
-        );
         Bounty storage bounty = bountyById[application.bountyId];
         require(
             getBountyStatus(bounty) == BountyStatus.OPEN_FOR_APPLICATIONS,
             "Invalid bounty status"
         );
-        require(bounty.creator == msg.sender, "Not bounty creator");
-        uint256 claimableHunterAmount = claimableTokenBalanceByUser[
-            application.hunter
-        ][bounty.token];
         require(
-            claimableHunterAmount >= bounty.minHunterDeposit,
-            "Claimable hunter amount too low"
+            getApplicationStatus(application) ==
+                ApplicationStatus.OPEN_TO_NOMINATION,
+            "Invalid application status"
         );
-        _moveTokensFromClaimableToLocked(
-            application.hunter,
-            bounty.token,
-            bounty.minHunterDeposit
-        );
-        application.acceptedAt = block.timestamp;
-        bounty.realisation.hunter = application.hunter;
-        bounty.realisation.startedAt = block.timestamp;
+        require(bounty.creator == msg.sender, "Not bounty creator");
+        application.nominatedAt = block.timestamp;
         bounty.application = application;
-        // The original bounty.hunterReward and bounty.deadline won't be overriden, we store the new values in bounty.application
         if (application.proposedReward > bounty.hunterReward) {
             _lockTokens(
                 bounty.token,
                 application.proposedReward - bounty.hunterReward
             );
-        } else if (application.proposedReward < bounty.hunterReward) {
-            _moveTokensFromLockedToClaimable(
-                msg.sender,
-                bounty.token,
-                bounty.hunterReward - application.proposedReward
-            );
         }
+
+        application.nominationAcceptanceDeadline =
+            block.timestamp +
+            bounty.nominationAcceptanceTime;
+    }
+
+    function acceptNomination(uint256 _applicationId) external {
+        Application storage application = applicationById[_applicationId];
+        require(application.hunter == msg.sender, "Not nominated hunter");
+        require(
+            getApplicationStatus(application) == ApplicationStatus.NOMINATED,
+            "Invalid application status"
+        );
+        Bounty storage bounty = bountyById[application.bountyId];
+        require(
+            application.nominationAcceptanceDeadline >= block.timestamp,
+            "Acceptance deadline passed"
+        );
+        address token = bounty.token;
+        _lockTokens(token, bounty.validatorReward + bounty.minHunterDeposit);
+        if (application.proposedReward < bounty.hunterReward) {
+            uint256 excessiveAmount = application.proposedReward -
+                bounty.hunterReward;
+            address creator = bounty.creator;
+            claimableTokenBalanceByUser[creator][token] += excessiveAmount;
+            tokenBalanceByUser[creator][token] -= excessiveAmount;
+        }
+        application.nominationAcceptedAt = block.timestamp;
+        bounty.hunterReward = application.proposedReward;
+        bounty.deadline = application.proposedDeadline;
     }
 
     function cancelApplication(uint256 _applicationId) external {
         Application storage application = applicationById[_applicationId];
         require(application.hunter == msg.sender, "Not bounty hunter");
+        ApplicationStatus status = getApplicationStatus(application);
         require(
-            getApplicationStatus(application) == ApplicationStatus.OPEN,
+            // TODO: add cancelRealisation method and remove ApplicationStatus.ACCEPTED from here
+            status == ApplicationStatus.ACCEPTED ||
+                status == ApplicationStatus.NOMINATED ||
+                status == ApplicationStatus.OPEN_TO_NOMINATION,
             "Invalid application status"
         );
         application.canceledAt = block.timestamp;
+        application.canceledBy = CanceledBy.HUNTER;
+        if (status == ApplicationStatus.NOMINATED) {
+            // TODO: rename to canceledNominationsCount and canceledRealisationsCount
+            userByAddress[msg.sender].canceledAfterNomination += 1;
+        } else if (status == ApplicationStatus.ACCEPTED) {
+            Bounty storage bounty = bountyById[application.bountyId];
+            userByAddress[msg.sender].canceledAfterAcceptance += 1;
+
+            uint256 daysSinceAcceptance = getDaysFromNow(
+                application.nominationAcceptedAt
+            );
+            // +1: 0 days counts as 1
+            uint256 percentageLostByHunter = (daysSinceAcceptance + 1) *
+                bounty.hunterDepositDecreasePerDayAfterAcceptance;
+            if (percentageLostByHunter > 100) {
+                percentageLostByHunter = 100;
+            }
+
+            uint256 minHunterDeposit = bounty.minHunterDeposit;
+            uint256 depositLostByHunter = (percentageLostByHunter *
+                minHunterDeposit *
+                100) / 10_000;
+            uint256 depositReturnedToHunter = minHunterDeposit -
+                depositLostByHunter;
+
+            address creator = bounty.creator;
+            address token = bounty.token;
+            uint256 validatorReward = bounty.validatorReward;
+            uint256 hunterReward = bounty.hunterReward;
+            uint256 creatorAmount = validatorReward +
+                hunterReward +
+                depositLostByHunter;
+
+            claimableTokenBalanceByUser[creator][token] += creatorAmount;
+            claimableTokenBalanceByUser[msg.sender][token] += (validatorReward +
+                depositReturnedToHunter);
+            tokenBalanceByUser[msg.sender][token] -= (validatorReward +
+                depositLostByHunter);
+        }
     }
 
-    function cancelRealisation(uint256 _realisationId) external {
-        Realisation storage realisation = realisationById[_realisationId];
-        require(realisation.hunter == msg.sender, "Not bounty hunter");
-        RealisationStatus status = getRealisationStatus(realisation);
+    function cancelApplicationNomination(uint256 _applicationId) external {
+        Application storage application = applicationById[_applicationId];
         require(
-            status == RealisationStatus.IN_PROGRESS,
-            "Invalid realisation status"
+            getApplicationStatus(application) == ApplicationStatus.NOMINATED,
+            "Invalid application status"
         );
-        realisation.canceledAt = block.timestamp;
-        realisation.canceledBy = CanceledBy.HUNTER;
-        Bounty storage bounty = bountyById[realisation.bountyId];
-        userByAddress[msg.sender].canceledRealisationsCount += 1;
-
-        uint256 daysSinceAcceptance = getDaysFromNow(realisation.startedAt);
-        // +1: 0 days counts as 1
-        uint256 percentageLostByHunter = (daysSinceAcceptance + 1) *
-            bounty.hunterDepositDecreasePerDayAfterAcceptance;
-        if (percentageLostByHunter > 100) {
-            percentageLostByHunter = 100;
-        }
-
-        uint256 minHunterDeposit = bounty.minHunterDeposit;
-        uint256 depositLostByHunter = (percentageLostByHunter *
-            minHunterDeposit *
-            100) / 10_000;
-        uint256 depositReturnedToHunter = minHunterDeposit -
-            depositLostByHunter;
-
-        address creator = bounty.creator;
-        address token = bounty.token;
-        uint256 validatorReward = bounty.validatorReward;
-        uint256 hunterReward = bounty.application.proposedReward;
-        uint256 creatorAmount = validatorReward +
-            hunterReward +
-            depositLostByHunter;
-
-        claimableTokenBalanceByUser[creator][token] += creatorAmount;
-        claimableTokenBalanceByUser[msg.sender][token] += (validatorReward +
-            depositReturnedToHunter);
-        tokenBalanceByUser[msg.sender][token] -= (validatorReward +
-            depositLostByHunter);
+        Bounty storage bounty = bountyById[application.bountyId];
+        require(bounty.creator == msg.sender, "Not bounty creator");
+        application.canceledAt = block.timestamp;
+        application.canceledBy = CanceledBy.CREATOR;
     }
 
     function addRealisationToReview(
@@ -562,37 +583,15 @@ contract BountyBay {
         address hunter = realisation.hunter;
         address token = bounty.token;
         uint256 validatorReward = bounty.validatorReward;
-        uint256 hunterReward = bounty.application.proposedReward;
-        uint256 deadline = bounty.application.proposedDeadline;
+        uint256 hunterReward = bounty.hunterReward;
         uint256 hunterDeposits = bounty.minHunterDeposit + validatorReward;
+        uint256 hunterAmount = hunterReward + hunterDeposits;
 
-        uint256 rewardPercentageLostByHunter;
-        if (realisation.addedToReviewAt > deadline) {
-            uint256 daysAfterDeadline = _calcDays(
-                realisation.addedToReviewAt - deadline
-            );
-
-            rewardPercentageLostByHunter =
-                (daysAfterDeadline + 1) *
-                bounty.hunterRewardDecreasePerDayAfterDeadline;
-            if (rewardPercentageLostByHunter > 100) {
-                rewardPercentageLostByHunter = 100;
-            }
-        }
-
-        uint256 rewardLostByHunter = (rewardPercentageLostByHunter *
-            hunterReward *
-            100) / 10_000;
-        uint256 finalHunterReward = hunterReward - rewardLostByHunter;
-
-        uint256 hunterAmount = finalHunterReward + hunterDeposits;
-
-        uint256 creatorAmount = validatorReward + rewardLostByHunter;
-
+        // TODO: calc correct amounts based on duration after deadline
         // TODO: Failed => Find why?
-        claimableTokenBalanceByUser[hunter][token] += hunterAmount; // OK
-        tokenBalanceByUser[hunter][token] -= hunterDeposits; // OK
-        claimableTokenBalanceByUser[msg.sender][token] += creatorAmount;
+        claimableTokenBalanceByUser[hunter][token] += hunterAmount;
+        tokenBalanceByUser[hunter][token] -= hunterDeposits;
+        claimableTokenBalanceByUser[msg.sender][token] += validatorReward;
         tokenBalanceByUser[msg.sender][token] -= (validatorReward +
             hunterAmount);
         realisation.realisationAcceptedAt = block.timestamp;
@@ -624,7 +623,7 @@ contract BountyBay {
         address creator = bounty.creator;
         address token = bounty.token;
         uint256 validatorReward = bounty.validatorReward;
-        uint256 hunterReward = bounty.application.proposedReward;
+        uint256 hunterReward = bounty.hunterReward;
         uint256 minHunterDeposit = bounty.minHunterDeposit;
         uint256 creatorAmount = validatorReward +
             hunterReward +
@@ -664,7 +663,8 @@ contract BountyBay {
         Application storage application = applicationById[_applicationId];
         require(application.hunter == msg.sender, "Not bounty hunter");
         require(
-            getApplicationStatus(application) == ApplicationStatus.OPEN,
+            getApplicationStatus(application) ==
+                ApplicationStatus.OPEN_TO_NOMINATION,
             "Invalid application status"
         );
         if (_proposedDeadline != 0) {
@@ -699,10 +699,6 @@ contract BountyBay {
         return a >= b ? a - b : b - a;
     }
 
-    function _calcDays(uint256 _time) private pure returns (uint256) {
-        return _time / 1 days;
-    }
-
     function _lockTokens(address _token, uint256 _amount) private {
         if (claimableTokenBalanceByUser[msg.sender][_token] >= _amount) {
             claimableTokenBalanceByUser[msg.sender][_token] -= _amount;
@@ -715,23 +711,5 @@ contract BountyBay {
             require(success, "Error transfering funds");
         }
         tokenBalanceByUser[msg.sender][_token] += _amount;
-    }
-
-    function _moveTokensFromClaimableToLocked(
-        address _user,
-        address _token,
-        uint256 _amount
-    ) private {
-        claimableTokenBalanceByUser[_user][_token] -= _amount;
-        tokenBalanceByUser[_user][_token] += _amount;
-    }
-
-    function _moveTokensFromLockedToClaimable(
-        address _user,
-        address _token,
-        uint256 _amount
-    ) private {
-        claimableTokenBalanceByUser[_user][_token] += _amount;
-        tokenBalanceByUser[_user][_token] -= _amount;
     }
 }
