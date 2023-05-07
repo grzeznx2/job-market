@@ -441,7 +441,7 @@ contract BountyBay {
         application.canceledAt = block.timestamp;
     }
 
-    function cancelRealisation(uint256 _realisationId) external {
+    function cancelRealisationAsHunter(uint256 _realisationId) external {
         Realisation storage realisation = realisationById[_realisationId];
         require(realisation.hunter == msg.sender, "Not bounty hunter");
         RealisationStatus status = getRealisationStatus(realisation);
@@ -454,19 +454,14 @@ contract BountyBay {
         Bounty storage bounty = bountyById[realisation.bountyId];
         userByAddress[msg.sender].canceledRealisationsAsHunter += 1;
 
-        uint256 daysSinceAcceptance = getDaysFromNow(realisation.startedAt);
-        // +1: 0 days counts as 1
-        uint256 percentageLostByHunter = (daysSinceAcceptance + 1) *
-            bounty.insurancePercentPerDay;
-        if (percentageLostByHunter > 100) {
-            percentageLostByHunter = 100;
-        }
+        uint256 insuranceLossByHunter = _calcInsuranceLoss(
+            realisation.startedAt,
+            bounty.insurancePercentPerDay,
+            bounty.insurance
+        );
 
-        uint256 insurance = bounty.insurance;
-        uint256 depositLostByHunter = (percentageLostByHunter *
-            insurance *
-            100) / 10_000;
-        uint256 depositReturnedToHunter = insurance - depositLostByHunter;
+        uint256 depositReturnedToHunter = bounty.insurance -
+            insuranceLossByHunter;
 
         address creator = bounty.creator;
         address token = bounty.token;
@@ -474,13 +469,13 @@ contract BountyBay {
         uint256 hunterReward = bounty.application.proposedReward;
         uint256 creatorAmount = validatorReward +
             hunterReward +
-            depositLostByHunter;
+            insuranceLossByHunter;
 
         claimableTokenBalanceByUser[creator][token] += creatorAmount;
         claimableTokenBalanceByUser[msg.sender][token] += (validatorReward +
             depositReturnedToHunter);
         tokenBalanceByUser[msg.sender][token] -= (validatorReward +
-            depositLostByHunter);
+            insuranceLossByHunter);
     }
 
     function cancelRealisationAsCreator(
@@ -500,18 +495,12 @@ contract BountyBay {
         realisation.canceledBy = CanceledBy.CREATOR;
         userByAddress[msg.sender].canceledRealisationsAsCreator += 1;
 
-        uint256 daysSinceAcceptance = getDaysFromNow(realisation.startedAt);
-        // +1: 0 days counts as 1
-        uint256 percentageLostByCreator = (daysSinceAcceptance + 1) *
-            bounty.insurancePercentPerDay;
-        if (percentageLostByCreator > 100) {
-            percentageLostByCreator = 100;
-        }
-
         uint256 insurance = bounty.insurance;
-        uint256 insuranceLostByCreator = (percentageLostByCreator *
-            insurance *
-            100) / 10_000;
+        uint256 insuranceLossByCreator = _calcInsuranceLoss(
+            realisation.startedAt,
+            bounty.insurancePercentPerDay,
+            insurance
+        );
 
         address hunter = realisation.hunter;
         address token = bounty.token;
@@ -520,11 +509,11 @@ contract BountyBay {
 
         claimableTokenBalanceByUser[hunter][token] += (insurance +
             validatorReward +
-            insuranceLostByCreator);
+            insuranceLossByCreator);
         tokenBalanceByUser[hunter][token] -= (insurance + validatorReward);
         claimableTokenBalanceByUser[msg.sender][token] += (validatorReward +
             hunterReward -
-            insuranceLostByCreator);
+            insuranceLossByCreator);
         tokenBalanceByUser[msg.sender][token] -= (validatorReward +
             hunterReward);
     }
@@ -551,7 +540,6 @@ contract BountyBay {
             "Invalid realisation status"
         );
         require(realisation.hunter == msg.sender, "Not bounty hunter");
-        Bounty storage bounty = bountyById[realisation.bountyId];
         realisation.addedToReviewAt = block.timestamp;
         realisation.realisationProof = _realisationProof;
     }
@@ -792,5 +780,20 @@ contract BountyBay {
     ) private {
         claimableTokenBalanceByUser[_user][_token] += _amount;
         tokenBalanceByUser[_user][_token] -= _amount;
+    }
+
+    function _calcInsuranceLoss(
+        uint256 _startedAt,
+        uint256 _percentPerDay,
+        uint256 _insurance
+    ) private returns (uint256) {
+        uint256 daysSinceAcceptance = getDaysFromNow(_startedAt);
+        // +1: 0 days counts as 1
+        uint256 percentageLost = (daysSinceAcceptance + 1) * _percentPerDay;
+        if (percentageLost > 100) {
+            percentageLost = 100;
+        }
+
+        return (percentageLost * _insurance * 100) / 10_000;
     }
 }
