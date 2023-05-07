@@ -53,7 +53,7 @@ contract BountyBay {
     ) internal view returns (ApplicationStatus) {
         if (_application.canceledAt != 0) {
             return ApplicationStatus.CANCELED;
-        else if (_application.validUntil < block.timestamp) {
+        } else if (_application.validUntil < block.timestamp) {
             return ApplicationStatus.EXPIRED;
         } else {
             return ApplicationStatus.OPEN;
@@ -381,60 +381,6 @@ contract BountyBay {
         applicationId++;
     }
 
-    function nominateApplication(uint256 _applicationId) external {
-        require(_applicationId != 0, "Invalid application id");
-        Application storage application = applicationById[_applicationId];
-        Bounty storage bounty = bountyById[application.bountyId];
-        require(
-            getBountyStatus(bounty) == BountyStatus.OPEN_FOR_APPLICATIONS,
-            "Invalid bounty status"
-        );
-        require(
-            getApplicationStatus(application) ==
-                ApplicationStatus.OPEN_TO_NOMINATION,
-            "Invalid application status"
-        );
-        require(bounty.creator == msg.sender, "Not bounty creator");
-        application.nominatedAt = block.timestamp;
-        bounty.application = application;
-        if (application.proposedReward > bounty.hunterReward) {
-            _lockTokens(
-                bounty.token,
-                application.proposedReward - bounty.hunterReward
-            );
-        }
-
-        application.nominationAcceptanceDeadline =
-            block.timestamp +
-            bounty.nominationAcceptanceTime;
-    }
-
-    function acceptNomination(uint256 _applicationId) external {
-        Application storage application = applicationById[_applicationId];
-        require(application.hunter == msg.sender, "Not nominated hunter");
-        require(
-            getApplicationStatus(application) == ApplicationStatus.NOMINATED,
-            "Invalid application status"
-        );
-        Bounty storage bounty = bountyById[application.bountyId];
-        require(
-            application.nominationAcceptanceDeadline >= block.timestamp,
-            "Acceptance deadline passed"
-        );
-        address token = bounty.token;
-        _lockTokens(token, bounty.validatorReward + bounty.minHunterDeposit);
-        if (application.proposedReward < bounty.hunterReward) {
-            uint256 excessiveAmount = application.proposedReward -
-                bounty.hunterReward;
-            address creator = bounty.creator;
-            claimableTokenBalanceByUser[creator][token] += excessiveAmount;
-            tokenBalanceByUser[creator][token] -= excessiveAmount;
-        }
-        application.nominationAcceptedAt = block.timestamp;
-        bounty.hunterReward = application.proposedReward;
-        bounty.deadline = application.proposedDeadline;
-    }
-
     function cancelApplication(uint256 _applicationId) external {
         Application storage application = applicationById[_applicationId];
         require(application.hunter == msg.sender, "Not bounty hunter");
@@ -541,7 +487,7 @@ contract BountyBay {
         return bounties;
     }
 
-    function whitelistToken(addres _token) external onlyAdmin {
+    function whitelistToken(address _token) external onlyAdmin {
         isWhitelistedToken[_token] = true;
     }
 
