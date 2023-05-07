@@ -417,6 +417,12 @@ contract BountyBay {
                 bounty.token,
                 application.proposedReward - bounty.hunterReward
             );
+        } else if (application.proposedReward < bounty.hunterReward) {
+            _moveTokensFromLockedToClaimable(
+                msg.sender,
+                bounty.token,
+                bounty.hunterReward - application.proposedReward
+            );
         }
     }
 
@@ -556,15 +562,37 @@ contract BountyBay {
         address hunter = realisation.hunter;
         address token = bounty.token;
         uint256 validatorReward = bounty.validatorReward;
-        uint256 hunterReward = bounty.hunterReward;
+        uint256 hunterReward = bounty.application.proposedReward;
+        uint256 deadline = bounty.application.proposedDeadline;
         uint256 hunterDeposits = bounty.minHunterDeposit + validatorReward;
-        uint256 hunterAmount = hunterReward + hunterDeposits;
 
-        // TODO: calc correct amounts based on duration after deadline
+        uint256 rewardPercentageLostByHunter;
+        if (realisation.addedToReviewAt > deadline) {
+            uint256 daysAfterDeadline = _calcDays(
+                realisation.addedToReviewAt - deadline
+            );
+
+            rewardPercentageLostByHunter =
+                (daysAfterDeadline + 1) *
+                bounty.hunterRewardDecreasePerDayAfterDeadline;
+            if (rewardPercentageLostByHunter > 100) {
+                rewardPercentageLostByHunter = 100;
+            }
+        }
+
+        uint256 rewardLostByHunter = (rewardPercentageLostByHunter *
+            hunterReward *
+            100) / 10_000;
+        uint256 finalHunterReward = hunterReward - rewardLostByHunter;
+
+        uint256 hunterAmount = finalHunterReward + hunterDeposits;
+
+        uint256 creatorAmount = validatorReward + rewardLostByHunter;
+
         // TODO: Failed => Find why?
-        claimableTokenBalanceByUser[hunter][token] += hunterAmount;
-        tokenBalanceByUser[hunter][token] -= hunterDeposits;
-        claimableTokenBalanceByUser[msg.sender][token] += validatorReward;
+        claimableTokenBalanceByUser[hunter][token] += hunterAmount; // OK
+        tokenBalanceByUser[hunter][token] -= hunterDeposits; // OK
+        claimableTokenBalanceByUser[msg.sender][token] += creatorAmount;
         tokenBalanceByUser[msg.sender][token] -= (validatorReward +
             hunterAmount);
         realisation.realisationAcceptedAt = block.timestamp;
@@ -672,6 +700,10 @@ contract BountyBay {
         return a >= b ? a - b : b - a;
     }
 
+    function _calcDays(uint256 _time) private pure returns (uint256) {
+        return _time / 1 days;
+    }
+
     function _lockTokens(address _token, uint256 _amount) private {
         if (claimableTokenBalanceByUser[msg.sender][_token] >= _amount) {
             claimableTokenBalanceByUser[msg.sender][_token] -= _amount;
@@ -687,6 +719,15 @@ contract BountyBay {
     }
 
     function _moveTokensFromClaimableToLocked(
+        address _user,
+        address _token,
+        uint256 _amount
+    ) private {
+        claimableTokenBalanceByUser[_user][_token] -= _amount;
+        tokenBalanceByUser[_user][_token] += _amount;
+    }
+
+    function _moveTokensFromLockedToClaimable(
         address _user,
         address _token,
         uint256 _amount
