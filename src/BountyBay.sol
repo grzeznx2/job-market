@@ -417,55 +417,65 @@ contract BountyBay {
     function cancelApplication(uint256 _applicationId) external {
         Application storage application = applicationById[_applicationId];
         require(application.hunter == msg.sender, "Not bounty hunter");
-        ApplicationStatus status = getApplicationStatus(application);
         require(
-            // TODO: add cancelRealisation method and remove ApplicationStatus.ACCEPTED from here
-            status == ApplicationStatus.ACCEPTED ||
-                status == ApplicationStatus.NOMINATED ||
-                status == ApplicationStatus.OPEN_TO_NOMINATION,
+            getApplicationStatus(application) == ApplicationStatus.OPEN,
             "Invalid application status"
         );
         application.canceledAt = block.timestamp;
-        application.canceledBy = CanceledBy.HUNTER;
-        if (status == ApplicationStatus.NOMINATED) {
-            // TODO: rename to canceledNominationsCount and canceledRealisationsCount
-            userByAddress[msg.sender].canceledAfterNomination += 1;
-        } else if (status == ApplicationStatus.ACCEPTED) {
-            Bounty storage bounty = bountyById[application.bountyId];
-            userByAddress[msg.sender].canceledAfterAcceptance += 1;
-
-            uint256 daysSinceAcceptance = getDaysFromNow(
-                application.nominationAcceptedAt
-            );
-            // +1: 0 days counts as 1
-            uint256 percentageLostByHunter = (daysSinceAcceptance + 1) *
-                bounty.hunterDepositDecreasePerDayAfterAcceptance;
-            if (percentageLostByHunter > 100) {
-                percentageLostByHunter = 100;
-            }
-
-            uint256 minHunterDeposit = bounty.minHunterDeposit;
-            uint256 depositLostByHunter = (percentageLostByHunter *
-                minHunterDeposit *
-                100) / 10_000;
-            uint256 depositReturnedToHunter = minHunterDeposit -
-                depositLostByHunter;
-
-            address creator = bounty.creator;
-            address token = bounty.token;
-            uint256 validatorReward = bounty.validatorReward;
-            uint256 hunterReward = bounty.hunterReward;
-            uint256 creatorAmount = validatorReward +
-                hunterReward +
-                depositLostByHunter;
-
-            claimableTokenBalanceByUser[creator][token] += creatorAmount;
-            claimableTokenBalanceByUser[msg.sender][token] += (validatorReward +
-                depositReturnedToHunter);
-            tokenBalanceByUser[msg.sender][token] -= (validatorReward +
-                depositLostByHunter);
-        }
     }
+
+    // function cancelApplication(uint256 _applicationId) external {
+    //     Application storage application = applicationById[_applicationId];
+    //     require(application.hunter == msg.sender, "Not bounty hunter");
+    //     ApplicationStatus status = getApplicationStatus(application);
+    //     require(
+    //         // TODO: add cancelRealisation method and remove ApplicationStatus.ACCEPTED from here
+    //         status == ApplicationStatus.ACCEPTED ||
+    //             status == ApplicationStatus.NOMINATED ||
+    //             status == ApplicationStatus.OPEN_TO_NOMINATION,
+    //         "Invalid application status"
+    //     );
+    //     application.canceledAt = block.timestamp;
+    //     application.canceledBy = CanceledBy.HUNTER;
+    //     if (status == ApplicationStatus.NOMINATED) {
+    //         // TODO: rename to canceledNominationsCount and canceledRealisationsCount
+    //         userByAddress[msg.sender].canceledAfterNomination += 1;
+    //     } else if (status == ApplicationStatus.ACCEPTED) {
+    //         Bounty storage bounty = bountyById[application.bountyId];
+    //         userByAddress[msg.sender].canceledAfterAcceptance += 1;
+
+    //         uint256 daysSinceAcceptance = getDaysFromNow(
+    //             application.nominationAcceptedAt
+    //         );
+    //         // +1: 0 days counts as 1
+    //         uint256 percentageLostByHunter = (daysSinceAcceptance + 1) *
+    //             bounty.hunterDepositDecreasePerDayAfterAcceptance;
+    //         if (percentageLostByHunter > 100) {
+    //             percentageLostByHunter = 100;
+    //         }
+
+    //         uint256 minHunterDeposit = bounty.minHunterDeposit;
+    //         uint256 depositLostByHunter = (percentageLostByHunter *
+    //             minHunterDeposit *
+    //             100) / 10_000;
+    //         uint256 depositReturnedToHunter = minHunterDeposit -
+    //             depositLostByHunter;
+
+    //         address creator = bounty.creator;
+    //         address token = bounty.token;
+    //         uint256 validatorReward = bounty.validatorReward;
+    //         uint256 hunterReward = bounty.hunterReward;
+    //         uint256 creatorAmount = validatorReward +
+    //             hunterReward +
+    //             depositLostByHunter;
+
+    //         claimableTokenBalanceByUser[creator][token] += creatorAmount;
+    //         claimableTokenBalanceByUser[msg.sender][token] += (validatorReward +
+    //             depositReturnedToHunter);
+    //         tokenBalanceByUser[msg.sender][token] -= (validatorReward +
+    //             depositLostByHunter);
+    //     }
+    // }
 
     function cancelApplicationNomination(uint256 _applicationId) external {
         Application storage application = applicationById[_applicationId];
