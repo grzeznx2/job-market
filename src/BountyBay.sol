@@ -137,11 +137,10 @@ contract BountyBay {
         uint256 hunterReward;
         uint256 validatorReward;
         uint256 minHunterReputation;
-        uint256 minHunterDeposit;
+        uint256 insurance;
         uint256[] applicationIds;
-        uint8 hunterDepositDecreasePerDayAfterAcceptance;
+        uint8 insurancePercentPerDay;
         uint8 hunterRewardDecreasePerDayAfterDeadline;
-        uint8 hunterGuaranteedRewardPerDayAfterStart;
         // TODO: implement bounty cancellation
         uint256 canceledAt;
         Application application;
@@ -158,7 +157,8 @@ contract BountyBay {
         uint256[] bountiesValidated;
         uint256[] bountiesAssignedToDo;
         uint256[] bountiesAssignedToValidation;
-        uint256 canceledRealisationsCount;
+        uint256 canceledRealisationsAsHunter;
+        uint256 canceledRealisationsAsCreator;
     }
 
     struct Application {
@@ -227,10 +227,9 @@ contract BountyBay {
         uint256 _hunterReward,
         uint256 _validatorReward,
         uint256 _minHunterReputation,
-        uint256 _minHunterDeposit,
+        uint256 _insurance,
         uint8 _refundDecreasePerDayAfterAcceptance,
-        uint8 _rewardDecreasePerDayAfterDeadline,
-        uint8 _hunterGuaranteedRewardPerDayAfterStart
+        uint8 _rewardDecreasePerDayAfterDeadline
     ) external {
         require(_deadline > block.timestamp, "Deadline must be in the future");
         uint256 nameLength = bytes(_name).length;
@@ -280,11 +279,10 @@ contract BountyBay {
             _hunterReward,
             _validatorReward,
             _minHunterReputation,
-            _minHunterDeposit,
+            _insurance,
             new uint256[](0),
             _refundDecreasePerDayAfterAcceptance,
             _rewardDecreasePerDayAfterDeadline,
-            _hunterGuaranteedRewardPerDayAfterStart,
             0,
             Application(
                 ZERO_ADDRESS,
@@ -358,11 +356,11 @@ contract BountyBay {
             uint256 hunterClaimableBalance = claimableTokenBalanceByUser[
                 msg.sender
             ][token];
-            if (bounty.minHunterDeposit > hunterClaimableBalance) {
+            if (bounty.insurance > hunterClaimableBalance) {
                 bool success = IERC20(token).transferFrom(
                     msg.sender,
                     address(this),
-                    bounty.minHunterDeposit - hunterClaimableBalance
+                    bounty.insurance - hunterClaimableBalance
                 );
                 require(success, "Error transfering funds");
             }
@@ -402,13 +400,13 @@ contract BountyBay {
             application.hunter
         ][bounty.token];
         require(
-            claimableHunterAmount >= bounty.minHunterDeposit,
+            claimableHunterAmount >= bounty.insurance,
             "Claimable hunter amount too low"
         );
         _moveTokensFromClaimableToLocked(
             application.hunter,
             bounty.token,
-            bounty.minHunterDeposit
+            bounty.insurance
         );
         application.acceptedAt = block.timestamp;
         bounty.realisation.hunter = application.hunter;
@@ -450,22 +448,21 @@ contract BountyBay {
         realisation.canceledAt = block.timestamp;
         realisation.canceledBy = CanceledBy.HUNTER;
         Bounty storage bounty = bountyById[realisation.bountyId];
-        userByAddress[msg.sender].canceledRealisationsCount += 1;
+        userByAddress[msg.sender].canceledRealisationsAsHunter += 1;
 
         uint256 daysSinceAcceptance = getDaysFromNow(realisation.startedAt);
         // +1: 0 days counts as 1
         uint256 percentageLostByHunter = (daysSinceAcceptance + 1) *
-            bounty.hunterDepositDecreasePerDayAfterAcceptance;
+            bounty.insurancePercentPerDay;
         if (percentageLostByHunter > 100) {
             percentageLostByHunter = 100;
         }
 
-        uint256 minHunterDeposit = bounty.minHunterDeposit;
+        uint256 insurance = bounty.insurance;
         uint256 depositLostByHunter = (percentageLostByHunter *
-            minHunterDeposit *
+            insurance *
             100) / 10_000;
-        uint256 depositReturnedToHunter = minHunterDeposit -
-            depositLostByHunter;
+        uint256 depositReturnedToHunter = insurance - depositLostByHunter;
 
         address creator = bounty.creator;
         address token = bounty.token;
@@ -579,7 +576,7 @@ contract BountyBay {
         uint256 validatorReward = bounty.validatorReward;
         uint256 hunterReward = bounty.application.proposedReward;
         uint256 deadline = bounty.application.proposedDeadline;
-        uint256 hunterDeposits = bounty.minHunterDeposit + validatorReward;
+        uint256 hunterDeposits = bounty.insurance + validatorReward;
 
         uint256 rewardPercentageLostByHunter;
         if (realisation.addedToReviewAt > deadline) {
@@ -640,17 +637,14 @@ contract BountyBay {
         address token = bounty.token;
         uint256 validatorReward = bounty.validatorReward;
         uint256 hunterReward = bounty.application.proposedReward;
-        uint256 minHunterDeposit = bounty.minHunterDeposit;
-        uint256 creatorAmount = validatorReward +
-            hunterReward +
-            minHunterDeposit;
+        uint256 insurance = bounty.insurance;
+        uint256 creatorAmount = validatorReward + hunterReward + insurance;
 
         // CALC based on time after deadline
         claimableTokenBalanceByUser[creator][token] += creatorAmount;
         tokenBalanceByUser[creator][token] -= (validatorReward + hunterReward);
         claimableTokenBalanceByUser[msg.sender][token] += validatorReward;
-        tokenBalanceByUser[msg.sender][token] -= (validatorReward +
-            minHunterDeposit);
+        tokenBalanceByUser[msg.sender][token] -= (validatorReward + insurance);
 
         realisation.rejectionAcceptedAt = block.timestamp;
     }
