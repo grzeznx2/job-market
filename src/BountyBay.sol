@@ -402,10 +402,11 @@ contract BountyBay {
             claimableHunterAmount >= bounty.minHunterDeposit,
             "Claimable hunter amount too low"
         );
-        claimableTokenBalanceByUser[application.hunter][bounty.token] -= bounty
-            .minHunterDeposit;
-        tokenBalanceByUser[application.hunter][bounty.token] += bounty
-            .minHunterDeposit;
+        _moveTokensFromClaimableToLocked(
+            application.hunter,
+            bounty.token,
+            bounty.minHunterDeposit
+        );
         application.acceptedAt = block.timestamp;
         bounty.realisation.hunter = application.hunter;
         bounty.realisation.startedAt = block.timestamp;
@@ -683,5 +684,14 @@ contract BountyBay {
             require(success, "Error transfering funds");
         }
         tokenBalanceByUser[msg.sender][_token] += _amount;
+    }
+
+    function _moveTokensFromClaimableToLocked(
+        address _user,
+        address _token,
+        uint256 _amount
+    ) private {
+        claimableTokenBalanceByUser[_user][_token] += _amount;
+        tokenBalanceByUser[_user][_token] -= _amount;
     }
 }
