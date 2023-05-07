@@ -381,6 +381,39 @@ contract BountyBay {
         applicationId++;
     }
 
+    function acceptApplication(uint256 _applicationId) external {
+        Application storage application = applicationById[_applicationId];
+        require(
+            getApplicationStatus(application) == ApplicationStatus.OPEN,
+            "Invalid application status"
+        );
+        Bounty storage bounty = bountyById[application.bountyId];
+        require(
+            getBountyStatus(bounty) == BountyStatus.OPEN_FOR_APPLICATIONS,
+            "Invalid bounty status"
+        );
+        require(bounty.creator == msg.sender, "Not bounty creator");
+        uint256 claimableHunterAmount = claimableTokenBalanceByUser[
+            application.hunter
+        ][bounty.token];
+        require(
+            claimableHunterAmount >= bounty.minHunterDeposit,
+            "Claimable hunter amount too low"
+        );
+        claimableTokenBalanceByUser[application.hunter][bounty.token] -= bounty
+            .minHunterDeposit;
+        tokenBalanceByUser[application.hunter][bounty.token] += bounty
+            .minHunterDeposit;
+        application.acceptedAt = block.timestamp;
+        bounty.application = application;
+        if (application.proposedReward > bounty.hunterReward) {
+            _lockTokens(
+                bounty.token,
+                application.proposedReward - bounty.hunterReward
+            );
+        }
+    }
+
     function cancelApplication(uint256 _applicationId) external {
         Application storage application = applicationById[_applicationId];
         require(application.hunter == msg.sender, "Not bounty hunter");
