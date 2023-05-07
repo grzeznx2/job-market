@@ -256,6 +256,10 @@ contract BountyBay {
         require(_reviewPeriodTime > 0, "Review Period Time must be >= 0");
         require(_hunterReward >= 0, "Hunter reward must be > 0");
         require(_validatorReward > 0, "Validator reward must be > 0");
+        require(
+            _insurance <= _hunterReward,
+            "Insurance cannot be greater than hunter reward"
+        );
         require(isWhitelistedToken[_token], "Invalid token");
         require(
             _refundDecreasePerDayAfterAcceptance <= 100,
@@ -477,6 +481,52 @@ contract BountyBay {
             depositReturnedToHunter);
         tokenBalanceByUser[msg.sender][token] -= (validatorReward +
             depositLostByHunter);
+    }
+
+    function cancelRealisationAsCreator(
+        uint256 _realisationId,
+        bool _cancelBounty
+    ) external {
+        Realisation storage realisation = realisationById[_realisationId];
+        Bounty storage bounty = bountyById[realisation.bountyId];
+
+        require(bounty.creator == msg.sender, "Not bounty creator");
+        RealisationStatus status = getRealisationStatus(realisation);
+        require(
+            status == RealisationStatus.IN_PROGRESS,
+            "Invalid realisation status"
+        );
+        realisation.canceledAt = block.timestamp;
+        realisation.canceledBy = CanceledBy.CREATOR;
+        userByAddress[msg.sender].canceledRealisationsAsCreator += 1;
+
+        uint256 daysSinceAcceptance = getDaysFromNow(realisation.startedAt);
+        // +1: 0 days counts as 1
+        uint256 percentageLostByCreator = (daysSinceAcceptance + 1) *
+            bounty.insurancePercentPerDay;
+        if (percentageLostByCreator > 100) {
+            percentageLostByCreator = 100;
+        }
+
+        uint256 insurance = bounty.insurance;
+        uint256 insuranceLostByCreator = (percentageLostByCreator *
+            insurance *
+            100) / 10_000;
+
+        address hunter = realisation.hunter;
+        address token = bounty.token;
+        uint256 validatorReward = bounty.validatorReward;
+        uint256 hunterReward = bounty.application.proposedReward;
+
+        claimableTokenBalanceByUser[hunter][token] += (insurance +
+            validatorReward +
+            insuranceLostByCreator);
+        tokenBalanceByUser[hunter][token] -= (insurance + validatorReward);
+        claimableTokenBalanceByUser[msg.sender][token] += (validatorReward +
+            hunterReward -
+            insuranceLostByCreator);
+        tokenBalanceByUser[msg.sender][token] -= (validatorReward +
+            hunterReward);
     }
 
     function cancelBounty(uint256 _bountyId) external {
