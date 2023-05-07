@@ -141,6 +141,7 @@ contract BountyBay {
         uint256[] applicationIds;
         uint8 hunterDepositDecreasePerDayAfterAcceptance;
         uint8 hunterRewardDecreasePerDayAfterDeadline;
+        uint8 hunterGuaranteedRewardPerDayAfterStart;
         // TODO: implement bounty cancellation
         uint256 canceledAt;
         Application application;
@@ -228,7 +229,8 @@ contract BountyBay {
         uint256 _minHunterReputation,
         uint256 _minHunterDeposit,
         uint8 _refundDecreasePerDayAfterAcceptance,
-        uint8 _rewardDecreasePerDayAfterDeadline
+        uint8 _rewardDecreasePerDayAfterDeadline,
+        uint8 _hunterGuaranteedRewardPerDayAfterStart
     ) external {
         require(_deadline > block.timestamp, "Deadline must be in the future");
         uint256 nameLength = bytes(_name).length;
@@ -282,6 +284,7 @@ contract BountyBay {
             new uint256[](0),
             _refundDecreasePerDayAfterAcceptance,
             _rewardDecreasePerDayAfterDeadline,
+            _hunterGuaranteedRewardPerDayAfterStart,
             0,
             Application(
                 ZERO_ADDRESS,
@@ -477,6 +480,18 @@ contract BountyBay {
             depositReturnedToHunter);
         tokenBalanceByUser[msg.sender][token] -= (validatorReward +
             depositLostByHunter);
+    }
+
+    function cancelBounty(uint256 _bountyId) external {
+        Bounty storage bounty = bountyById[_bountyId];
+        require(bounty.creator == msg.sender, "Not bounty creator");
+        require(getBountyStatus(bounty) == BountyStatus.OPEN_FOR_APPLICATIONS);
+        bounty.canceledAt = block.timestamp;
+        _moveTokensFromLockedToClaimable(
+            msg.sender,
+            bounty.token,
+            bounty.hunterReward + bounty.validatorReward
+        );
     }
 
     function addRealisationToReview(
