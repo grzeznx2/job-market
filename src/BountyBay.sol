@@ -4,6 +4,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract BountyBay {
     address constant ZERO_ADDRESS = address(0);
+    bytes32 constant emptyStringHash = keccak256(abi.encodePacked(""));
     uint256 public minBountyNameLength = 3;
     uint256 public maxBountyNameLength = 1000;
     uint256 public minBountyDescriptionLength = 3;
@@ -141,8 +142,8 @@ contract BountyBay {
         uint256[] applicationIds;
         uint8 insurancePercentPerDay;
         uint8 hunterRewardDecreasePerDayAfterDeadline;
-        // TODO: implement bounty cancellation
         uint256 canceledAt;
+        uint256[] categoryIds;
         Application application;
         Realisation realisation;
     }
@@ -207,6 +208,10 @@ contract BountyBay {
     mapping(address => mapping(address => uint256)) private tokenBalanceByUser;
     mapping(address => mapping(address => uint256))
         private claimableTokenBalanceByUser;
+    uint256 categoryId;
+    mapping(uint256 => string) private categoryById;
+    mapping(string => bool) private categoryExists;
+    mapping(uint256 => bool) private tempCategoryIdExists;
 
     constructor() {
         admin = msg.sender;
@@ -215,6 +220,19 @@ contract BountyBay {
     modifier onlyAdmin() {
         require(msg.sender == admin, "Only for admin");
         _;
+    }
+
+    function addCategory(string calldata _category) external onlyAdmin {
+        require(!categoryExists[_category], "Category already exists");
+        categoryExists[_category] = true;
+        categoryById[categoryId] = _category;
+        categoryId++;
+    }
+
+    function deleteCategory(uint256 _categoryId) external onlyAdmin {
+        string memory category = categoryById[categoryId];
+        categoryExists[category] = false;
+        categoryById[categoryId] = "";
     }
 
     function createBounty(
@@ -229,7 +247,8 @@ contract BountyBay {
         uint256 _minHunterReputation,
         uint256 _insurance,
         uint8 _refundDecreasePerDayAfterAcceptance,
-        uint8 _rewardDecreasePerDayAfterDeadline
+        uint8 _rewardDecreasePerDayAfterDeadline,
+        uint256[] calldata _categoryIds
     ) external {
         require(_deadline > block.timestamp, "Deadline must be in the future");
         uint256 nameLength = bytes(_name).length;
@@ -270,6 +289,23 @@ contract BountyBay {
             "Reward decrease must be <= 100"
         );
 
+        for (uint256 i; i < _categoryIds.length; i++) {
+            uint256 currentId = _categoryIds[i];
+            require(
+                tempCategoryIdExists[currentId] == false,
+                "Duplicated category id"
+            );
+            tempCategoryIdExists[currentId] = true;
+
+            string memory category = categoryById[currentId];
+
+            require(categoryExists[category], "Category does not exist");
+        }
+
+        for (uint256 i; i < _categoryIds.length; i++) {
+            tempCategoryIdExists[_categoryIds[i]] = false;
+        }
+
         Bounty memory bounty = Bounty(
             bountyId,
             msg.sender,
@@ -288,6 +324,7 @@ contract BountyBay {
             _refundDecreasePerDayAfterAcceptance,
             _rewardDecreasePerDayAfterDeadline,
             0,
+            _categoryIds,
             Application(
                 ZERO_ADDRESS,
                 bountyId,
@@ -786,7 +823,7 @@ contract BountyBay {
         uint256 _startedAt,
         uint256 _percentPerDay,
         uint256 _insurance
-    ) private returns (uint256) {
+    ) private view returns (uint256) {
         uint256 daysSinceAcceptance = getDaysFromNow(_startedAt);
         // +1: 0 days counts as 1
         uint256 percentageLost = (daysSinceAcceptance + 1) * _percentPerDay;
