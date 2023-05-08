@@ -230,9 +230,9 @@ contract BountyBay {
     }
 
     function deleteCategory(uint256 _categoryId) external onlyAdmin {
-        string memory category = categoryById[categoryId];
+        string memory category = categoryById[_categoryId];
         categoryExists[category] = false;
-        categoryById[categoryId] = "";
+        categoryById[_categoryId] = "";
     }
 
     function createBounty(
@@ -297,9 +297,10 @@ contract BountyBay {
             );
             tempCategoryIdExists[currentId] = true;
 
-            string memory category = categoryById[currentId];
-
-            require(categoryExists[category], "Category does not exist");
+            require(
+                categoryExists[categoryById[currentId]],
+                "Category does not exist"
+            );
         }
 
         for (uint256 i; i < _categoryIds.length; i++) {
