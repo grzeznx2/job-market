@@ -222,14 +222,28 @@ contract BountyBay {
         _;
     }
 
-    function addCategory(string calldata _category) external onlyAdmin {
+    function addCategories(string[] calldata _categories) external onlyAdmin {
+        for (uint i; i < _categories.length; i++) {
+            addCategory(_categories[i]);
+        }
+    }
+
+    function deleteCategories(
+        uint256[] calldata _categoryIds
+    ) external onlyAdmin {
+        for (uint i; i < _categoryIds.length; i++) {
+            deleteCategory(_categoryIds[i]);
+        }
+    }
+
+    function addCategory(string memory _category) internal onlyAdmin {
         require(!categoryExists[_category], "Category already exists");
         categoryExists[_category] = true;
         categoryById[categoryId] = _category;
         categoryId++;
     }
 
-    function deleteCategory(uint256 _categoryId) external onlyAdmin {
+    function deleteCategory(uint256 _categoryId) internal onlyAdmin {
         string memory category = categoryById[_categoryId];
         categoryExists[category] = false;
         categoryById[_categoryId] = "";
