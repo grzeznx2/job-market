@@ -158,6 +158,7 @@ contract BountyBay {
         uint256[] bountiesValidated;
         uint256[] bountiesAssignedToDo;
         uint256[] bountiesAssignedToValidation;
+        uint256[] rateIds;
         uint256 canceledRealisationsAsHunter;
         uint256 canceledRealisationsAsCreator;
     }
@@ -192,14 +193,25 @@ contract BountyBay {
         bool creatorRated;
     }
 
+    struct Rate {
+        uint256 rateId;
+        address ratedUser;
+        bool positively;
+        address ratedBy;
+        string comment;
+        uint256[] confirmedSkills;
+    }
+
     mapping(address => mapping(uint256 => uint256))
         private applicationIdByBountyIdAndAddress;
     address public admin;
     uint256 private bountyId;
     uint256 private applicationId = 1;
+    uint256 private rateId;
     mapping(uint256 => Bounty) private bountyById;
     mapping(uint256 => Application) private applicationById;
     mapping(uint256 => Realisation) private realisationById;
+    mapping(uint256 => Rate) private rateById;
     mapping(uint256 => address) private creatorByBountyId;
     mapping(uint256 => address) private hunterByBountyId;
     mapping(uint256 => address) private validatorByBountyId;
@@ -215,6 +227,7 @@ contract BountyBay {
     mapping(string => bool) private categoryExists;
     mapping(uint256 => bool) private tempCategoryIdExists;
     mapping(address => mapping(uint256 => uint256)) skillsConfirmations;
+    uint256[] private tempArray;
 
     constructor() {
         admin = msg.sender;
@@ -791,6 +804,7 @@ contract BountyBay {
     function rateHunter(
         uint256 _realisationId,
         bool _positively,
+        string calldata _comment,
         uint256[] calldata _confirmedSkills
     ) external {
         Realisation storage realisation = realisationById[_realisationId];
@@ -824,19 +838,32 @@ contract BountyBay {
                 tempCategoryIdExists[currentId] == false,
                 "Duplicated category id"
             );
-            tempCategoryIdExists[currentId] = true;
 
             require(
                 categoryExists[categoryById[currentId]],
                 "Category does not exist"
             );
+
+            tempCategoryIdExists[currentId] = true;
+            tempArray.push(currentId);
+            skillsConfirmations[realisation.hunter][currentId]++;
         }
 
-        for (uint256 i; i < _confirmedSkills.length; i++) {
-            tempCategoryIdExists[_confirmedSkills[i]] = false;
+        for (uint256 i; i < tempArray.length; i++) {
+            tempCategoryIdExists[tempArray[i]] = false;
         }
 
         realisation.hunterRated = true;
+        rateById[rateId] = Rate(
+            realisation.id,
+            realisation.hunter,
+            _positively,
+            msg.sender,
+            _comment,
+            tempArray
+        );
+        rateId++;
+        delete tempArray;
     }
 
     // TODO: move this method to some library
