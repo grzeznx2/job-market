@@ -225,9 +225,9 @@ contract BountyBay {
     uint256 categoryId;
     mapping(uint256 => string) private categoryById;
     mapping(string => bool) private categoryExists;
-    mapping(uint256 => bool) private tempCategoryIdExists;
+    mapping(uint256 => bool) private tempUintMapping;
     mapping(address => mapping(uint256 => uint256)) skillsConfirmations;
-    uint256[] private tempArray;
+    uint256[] private tempUintArray;
 
     constructor() {
         admin = msg.sender;
@@ -322,19 +322,20 @@ contract BountyBay {
         for (uint256 i; i < _categoryIds.length; i++) {
             uint256 currentId = _categoryIds[i];
             require(
-                tempCategoryIdExists[currentId] == false,
+                tempUintMapping[currentId] == false,
                 "Duplicated category id"
             );
-            tempCategoryIdExists[currentId] = true;
 
             require(
                 categoryExists[categoryById[currentId]],
                 "Category does not exist"
             );
+            tempUintMapping[currentId] = true;
+            tempUintArray.push(currentId);
         }
 
-        for (uint256 i; i < _categoryIds.length; i++) {
-            tempCategoryIdExists[_categoryIds[i]] = false;
+        for (uint256 i; i < tempUintArray.length; i++) {
+            tempUintMapping[tempUintArray[i]] = false;
         }
 
         Bounty memory bounty = Bounty(
@@ -355,7 +356,7 @@ contract BountyBay {
             _refundDecreasePerDayAfterAcceptance,
             _rewardDecreasePerDayAfterDeadline,
             0,
-            _categoryIds,
+            tempUintArray,
             Application(
                 ZERO_ADDRESS,
                 bountyId,
@@ -392,6 +393,7 @@ contract BountyBay {
         bountyIdsByCreator[msg.sender].push(bountyId);
         bountyIds.push(bountyId);
         bountyId++;
+        delete tempUintArray;
     }
 
     function applyForBounty(
@@ -835,7 +837,7 @@ contract BountyBay {
         for (uint256 i; i < _confirmedSkills.length; i++) {
             uint256 currentId = _confirmedSkills[i];
             require(
-                tempCategoryIdExists[currentId] == false,
+                tempUintMapping[currentId] == false,
                 "Duplicated category id"
             );
 
@@ -844,13 +846,9 @@ contract BountyBay {
                 "Category does not exist"
             );
 
-            tempCategoryIdExists[currentId] = true;
-            tempArray.push(currentId);
+            tempUintMapping[currentId] = true;
+            tempUintArray.push(currentId);
             skillsConfirmations[realisation.hunter][currentId]++;
-        }
-
-        for (uint256 i; i < tempArray.length; i++) {
-            tempCategoryIdExists[tempArray[i]] = false;
         }
 
         realisation.hunterRated = true;
@@ -860,10 +858,11 @@ contract BountyBay {
             _positively,
             msg.sender,
             _comment,
-            tempArray
+            tempUintArray
         );
         rateId++;
-        delete tempArray;
+
+        _clearTempUintMappingAndArray();
     }
 
     // TODO: move this method to some library
@@ -930,5 +929,12 @@ contract BountyBay {
         }
 
         return (percentageLost * _insurance * 100) / 10_000;
+    }
+
+    function _clearTempUintMappingAndArray() private {
+        for (uint256 i; i < tempUintArray.length; i++) {
+            tempUintMapping[tempUintArray[i]] = false;
+        }
+        delete tempUintArray;
     }
 }
