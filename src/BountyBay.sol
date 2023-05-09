@@ -188,6 +188,8 @@ contract BountyBay {
         uint256 canceledAt;
         CanceledBy canceledBy;
         string realisationProof;
+        bool hunterRated;
+        bool creatorRated;
     }
 
     mapping(address => mapping(uint256 => uint256))
@@ -212,6 +214,7 @@ contract BountyBay {
     mapping(uint256 => string) private categoryById;
     mapping(string => bool) private categoryExists;
     mapping(uint256 => bool) private tempCategoryIdExists;
+    mapping(address => mapping(uint256 => uint256)) skillsConfirmations;
 
     constructor() {
         admin = msg.sender;
@@ -365,7 +368,9 @@ contract BountyBay {
                 0,
                 0,
                 CanceledBy.NONE,
-                ""
+                "",
+                false,
+                false
             )
         );
 
@@ -781,6 +786,57 @@ contract BountyBay {
             require(_validUntil >= block.timestamp, "Too late");
             application.validUntil = _validUntil;
         }
+    }
+
+    function rateHunter(
+        uint256 _realisationId,
+        bool _positively,
+        uint256[] calldata _confirmedSkills
+    ) external {
+        Realisation storage realisation = realisationById[_realisationId];
+        require(
+            bountyById[realisation.bountyId].creator == msg.sender,
+            "Not bounty creator"
+        );
+        require(!realisation.hunterRated, "Hunter already rated");
+        RealisationStatus realisationStatus = getRealisationStatus(realisation);
+        require(
+            realisationStatus == RealisationStatus.ACCEPTED ||
+                realisationStatus == RealisationStatus.CANCELED_BY_CREATOR ||
+                realisationStatus == RealisationStatus.CANCELED_BY_CREATOR ||
+                realisationStatus == RealisationStatus.ENDED ||
+                realisationStatus == RealisationStatus.NOT_ACCEPTED,
+            "Invalid realisation status"
+        );
+
+        User storage hunter = userByAddress[realisation.hunter];
+        if (_positively) {
+            hunter.reputation++;
+        } else {
+            if (hunter.reputation > 0) {
+                hunter.reputation++;
+            }
+        }
+
+        for (uint256 i; i < _confirmedSkills.length; i++) {
+            uint256 currentId = _confirmedSkills[i];
+            require(
+                tempCategoryIdExists[currentId] == false,
+                "Duplicated category id"
+            );
+            tempCategoryIdExists[currentId] = true;
+
+            require(
+                categoryExists[categoryById[currentId]],
+                "Category does not exist"
+            );
+        }
+
+        for (uint256 i; i < _confirmedSkills.length; i++) {
+            tempCategoryIdExists[_confirmedSkills[i]] = false;
+        }
+
+        realisation.hunterRated = true;
     }
 
     // TODO: move this method to some library
