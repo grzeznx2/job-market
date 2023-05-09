@@ -334,10 +334,6 @@ contract BountyBay {
             tempUintArray.push(currentId);
         }
 
-        for (uint256 i; i < tempUintArray.length; i++) {
-            tempUintMapping[tempUintArray[i]] = false;
-        }
-
         Bounty memory bounty = Bounty(
             bountyId,
             msg.sender,
@@ -393,7 +389,7 @@ contract BountyBay {
         bountyIdsByCreator[msg.sender].push(bountyId);
         bountyIds.push(bountyId);
         bountyId++;
-        delete tempUintArray;
+        _clearTempUintMappingAndArray();
     }
 
     function applyForBounty(
@@ -810,12 +806,15 @@ contract BountyBay {
         uint256[] calldata _confirmedSkills
     ) external {
         Realisation storage realisation = realisationById[_realisationId];
+
         require(
             bountyById[realisation.bountyId].creator == msg.sender,
             "Not bounty creator"
         );
         require(!realisation.hunterRated, "Hunter already rated");
+
         RealisationStatus realisationStatus = getRealisationStatus(realisation);
+
         require(
             realisationStatus == RealisationStatus.ACCEPTED ||
                 realisationStatus == RealisationStatus.CANCELED_BY_CREATOR ||
@@ -830,7 +829,7 @@ contract BountyBay {
             hunter.reputation++;
         } else {
             if (hunter.reputation > 0) {
-                hunter.reputation++;
+                hunter.reputation--;
             }
         }
 
@@ -860,9 +859,56 @@ contract BountyBay {
             _comment,
             tempUintArray
         );
+
         rateId++;
 
         _clearTempUintMappingAndArray();
+    }
+
+    function rateCreator(
+        uint256 _realisationId,
+        bool _positively,
+        string calldata _comment
+    ) external {
+        Realisation storage realisation = realisationById[_realisationId];
+
+        require(realisation.hunter == msg.sender, "Not bounty hunter");
+        require(!realisation.creatorRated, "Creator already rated");
+
+        RealisationStatus realisationStatus = getRealisationStatus(realisation);
+
+        require(
+            realisationStatus == RealisationStatus.ACCEPTED ||
+                realisationStatus == RealisationStatus.CANCELED_BY_CREATOR ||
+                realisationStatus == RealisationStatus.CANCELED_BY_CREATOR ||
+                realisationStatus == RealisationStatus.ENDED ||
+                realisationStatus == RealisationStatus.NOT_ACCEPTED,
+            "Invalid realisation status"
+        );
+
+        address creatorAddress = bountyById[realisation.bountyId].creator;
+
+        User storage creator = userByAddress[creatorAddress];
+
+        if (_positively) {
+            creator.reputation++;
+        } else {
+            if (creator.reputation > 0) {
+                creator.reputation--;
+            }
+        }
+
+        realisation.creatorRated = true;
+        rateById[rateId] = Rate(
+            realisation.id,
+            creatorAddress,
+            _positively,
+            msg.sender,
+            _comment,
+            tempUintArray
+        );
+
+        rateId++;
     }
 
     // TODO: move this method to some library
