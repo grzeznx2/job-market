@@ -11,6 +11,7 @@ contract BountyBay {
     uint256 public maxBountyDescriptionLength = 1000;
     uint256 public minBountyAcceptanceCriteriaLength = 3;
     uint256 public maxBountyAcceptanceCriteriaLength = 1000;
+    uint256 public timeForValidationApplication = 3 days;
 
     enum BountyStatus {
         OPEN_FOR_APPLICATIONS,
@@ -37,6 +38,7 @@ contract BountyBay {
         UNDER_REVIEW,
         ACCEPTED,
         NOT_ACCEPTED,
+        OPEN_TO_VALIDATION_APPLICATIONS,
         UNDER_VALIDATION,
         ENDED,
         CANCELED_BY_HUNTER,
@@ -63,7 +65,7 @@ contract BountyBay {
 
     function getRealisationStatus(
         Realisation memory _realisation
-    ) internal pure returns (RealisationStatus) {
+    ) internal returns (RealisationStatus) {
         if (_realisation.canceledAt != 0) {
             if (_realisation.canceledBy == CanceledBy.HUNTER) {
                 return RealisationStatus.CANCELED_BY_HUNTER;
@@ -76,10 +78,12 @@ contract BountyBay {
         ) {
             return RealisationStatus.ENDED;
         } else if (
-            _realisation.passedToValidationAt != 0 &&
-            _realisation.validatedAt == 0
+            _realisation.validatedAt == 0 &&
+            _realisation.validationApplicationDeadline >= block.timestamp
         ) {
             return RealisationStatus.UNDER_VALIDATION;
+        } else if (_realisation.passedToValidationAt != 0) {
+            return RealisationStatus.OPEN_TO_VALIDATION_APPLICATIONS;
         } else if (
             _realisation.realisationRejectedAt != 0 &&
             _realisation.passedToValidationAt == 0
@@ -98,7 +102,7 @@ contract BountyBay {
 
     function getBountyStatus(
         Bounty memory _bounty
-    ) internal pure returns (BountyStatus) {
+    ) internal returns (BountyStatus) {
         RealisationStatus realisationStatus = getRealisationStatus(
             _bounty.realisation
         );
@@ -187,6 +191,7 @@ contract BountyBay {
         uint256 passedToValidationAt;
         uint256 validatedAt;
         uint256 canceledAt;
+        uint256 validationApplicationDeadline;
         CanceledBy canceledBy;
         string realisationProof;
         bool hunterRated;
@@ -382,6 +387,7 @@ contract BountyBay {
                 bountyId,
                 // Realisation.id probably unnecessary, because it's always equall to bountyId
                 bountyId,
+                0,
                 0,
                 0,
                 0,
@@ -777,6 +783,9 @@ contract BountyBay {
             "Invalid realisation status"
         );
         realisation.passedToValidationAt = block.timestamp;
+        realisation.validationApplicationDeadline =
+            block.timestamp +
+            timeForValidationApplication;
     }
 
     function updateApplication(
@@ -931,7 +940,8 @@ contract BountyBay {
         RealisationStatus realisationStatus = getRealisationStatus(realisation);
 
         require(
-            realisationStatus == RealisationStatus.UNDER_VALIDATION,
+            realisationStatus ==
+                RealisationStatus.OPEN_TO_VALIDATION_APPLICATIONS,
             "Invalid realisation status"
         );
 
