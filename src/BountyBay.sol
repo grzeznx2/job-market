@@ -191,6 +191,15 @@ contract BountyBay {
         string realisationProof;
         bool hunterRated;
         bool creatorRated;
+        uint256[] validationApplicationIds;
+    }
+
+    struct ValidationApplication {
+        uint256 id;
+        address validator;
+        uint256 realisationId;
+        uint256 score;
+        uint256 createdAt;
     }
 
     struct Rate {
@@ -204,14 +213,18 @@ contract BountyBay {
 
     mapping(address => mapping(uint256 => uint256))
         private applicationIdByBountyIdAndAddress;
+    mapping(address => mapping(uint256 => uint256))
+        private validationApplicationIdByRealisationIdAndAddress;
     address public admin;
     uint256 private bountyId;
     uint256 private applicationId = 1;
     uint256 private rateId;
+    uint256 private validationApplicationId;
     mapping(uint256 => Bounty) private bountyById;
     mapping(uint256 => Application) private applicationById;
     mapping(uint256 => Realisation) private realisationById;
     mapping(uint256 => Rate) private rateById;
+    mapping(uint256 => ValidationApplication) private validationApplicationById;
     mapping(uint256 => address) private creatorByBountyId;
     mapping(uint256 => address) private hunterByBountyId;
     mapping(uint256 => address) private validatorByBountyId;
@@ -380,7 +393,8 @@ contract BountyBay {
                 CanceledBy.NONE,
                 "",
                 false,
-                false
+                false,
+                new uint256[](0)
             )
         );
 
@@ -885,7 +899,7 @@ contract BountyBay {
                 realisationStatus == RealisationStatus.NOT_ACCEPTED,
             "Invalid realisation status"
         );
-
+        // TODO: consider storing creator in Realisation struct to avoid reading bounty first
         address creatorAddress = bountyById[realisation.bountyId].creator;
 
         User storage creator = userByAddress[creatorAddress];
@@ -905,10 +919,56 @@ contract BountyBay {
             _positively,
             msg.sender,
             _comment,
-            tempUintArray
+            new uint256[](0)
         );
 
         rateId++;
+    }
+
+    function applyForRealisationValidation(uint256 _realisationId) external {
+        // TODO: add timeForValidationApplications?
+        Realisation storage realisation = realisationById[_realisationId];
+        RealisationStatus realisationStatus = getRealisationStatus(realisation);
+
+        require(
+            realisationStatus == RealisationStatus.UNDER_VALIDATION,
+            "Invalid realisation status"
+        );
+
+        require(
+            validationApplicationIdByRealisationIdAndAddress[msg.sender][
+                _realisationId
+            ] == 0,
+            "Already applied"
+        );
+
+        require(realisation.hunter != msg.sender, "Hunter cannot be validator");
+
+        Bounty storage bounty = bountyById[realisation.bountyId];
+
+        require(bounty.creator != msg.sender, "Creator cannot be validator");
+
+        uint256 score = userByAddress[msg.sender].reputation;
+
+        for (uint256 i; i < bounty.categoryIds.length; i++) {
+            score += skillsConfirmations[msg.sender][bounty.categoryIds[i]];
+        }
+
+        validationApplicationById[
+            validationApplicationId
+        ] = ValidationApplication(
+            validationApplicationId,
+            msg.sender,
+            _realisationId,
+            score,
+            block.timestamp
+        );
+
+        validationApplicationIdByRealisationIdAndAddress[msg.sender][
+            _realisationId
+        ] = validationApplicationId;
+        realisation.validationApplicationIds.push(validationApplicationId);
+        validationApplicationId++;
     }
 
     // TODO: move this method to some library
