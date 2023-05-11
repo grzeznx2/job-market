@@ -981,6 +981,24 @@ contract BountyBay {
         validationApplicationId++;
     }
 
+    function getHighestScoreValidationApplication(
+        uint256 _realisationId
+    ) external view returns (ValidationApplication memory va) {
+        // TODO: handle case with 0 applications
+        Realisation memory realisation = realisationById[_realisationId];
+
+        for (uint256 i; i < realisation.validationApplicationIds.length; i++) {
+            ValidationApplication storage currentVA = validationApplicationById[
+                realisation.validationApplicationIds[i]
+            ];
+            if (currentVA.score > va.score) {
+                va = currentVA;
+            }
+        }
+
+        return va;
+    }
+
     // TODO: move this method to some library
     function getDaysFromNow(
         uint256 _timestamp
